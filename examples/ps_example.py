@@ -2,7 +2,7 @@
 
 # The MIT License (MIT)
 #
-# Copyright (c) 2015 Charles Armstrap <charles@armstrap.org>
+# Copyright (c) 2016 Charles Armstrap <charles@armstrap.org>
 # If you like this library, consider donating to: http://bit.ly/pyvirtualbench
 # Anything helps.
 #
@@ -35,6 +35,9 @@ try:
     voltage_level = 1.0
     current_limit = 0.5
 
+    # You will probably need to replace "myVirtualBench" with the name of your device.
+    # By default, the device name is the model number and serial number separated by a hyphen; e.g., "VB8012-309738A".
+    # You can see the device's name in the VirtualBench Application under File->About
     virtualbench = PyVirtualBench('myVirtualBench')
     ps = virtualbench.acquire_power_supply()
 

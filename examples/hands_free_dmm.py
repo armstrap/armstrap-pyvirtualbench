@@ -2,7 +2,7 @@
 
 # The MIT License (MIT)
 #
-# Copyright (c) 2015 Charles Armstrap <charles@armstrap.org>
+# Copyright (c) 2016 Charles Armstrap <charles@armstrap.org>
 # If you like this library, consider donating to: http://bit.ly/pyvirtualbench
 # Anything helps.
 #
@@ -34,7 +34,7 @@
 #
 # This example requires a USB foot pedal to function.  The one used here (note, any
 # USB foot pedal can be used with some slight modifications to this code) is below.
-# 
+#
 # Infinity USB Digital Foot Control with Computer plug (IN-USB2)
 # This hardware device can be found on amazon.com for approximately $50 USD
 # Link: http://www.amazon.com/Infinity-Digital-Control-Computer--USB2/dp/B002MY6I7G
@@ -50,6 +50,9 @@ import os.path
 from threading import Thread
 import math
 
+# You will probably need to replace "myVirtualBench" with the name of your device.
+# By default, the device name is the model number and serial number separated by a hyphen; e.g., "VB8012-309738A".
+# You can see the device's name in the VirtualBench Application under File->About
 virtualbench = PyVirtualBench('myVirtualBench')
 selected_instrument_index = 0 # a global index to reference the currently selected instrument in the global 'instruments' array
 

@@ -1,6 +1,6 @@
 # The MIT License (MIT)
 #
-# Copyright (c) 2015 Charles Armstrap <charles@armstrap.org>
+# Copyright (c) 2016 Charles Armstrap <charles@armstrap.org>
 # If you like this library, consider donating to: http://bit.ly/pyvirtualbench
 # Anything helps.
 #
@@ -25,7 +25,7 @@
 from ctypes import c_bool, c_size_t, c_double, c_uint8, c_int32, c_uint32, c_int64, c_uint64, c_wchar, c_wchar_p, Structure, c_int, cdll, byref
 from enum import IntEnum
 
-NIVB_LIBRARY_VERSION = 17874944 # 0x0110C000
+NIVB_LIBRARY_VERSION = 253804545 # 0x0F20C001 15.2.0f0
 
 class Language(IntEnum):
     CURRENT_THREAD_LOCALE = 0
@@ -137,6 +137,8 @@ class MsoTriggerType(IntEnum):
     DIGITAL_EDGE = 2
     DIGITAL_PATTERN = 3
     DIGITAL_GLITCH = 4
+    ANALOG_PULSEWIDTH = 5
+    DIGITAL_PULSEWIDTH = 6
     def __str__(self):
         return self.name.replace("_", " ").title()
 
@@ -152,6 +154,20 @@ class MsoTriggerReason(IntEnum):
     NORMAL = 0
     FORCED = 1
     AUTO = 2
+    def __str__(self):
+        return self.name.replace("_", " ").title()
+
+class MsoComparisonMode(IntEnum):
+    GREATER_THAN_UPPER_LIMIT = 0
+    LESS_THAN_LOWER_LIMIT = 1
+    INSIDE_LIMITS = 2
+    OUTSIDE_LIMITS = 3
+    def __str__(self):
+        return self.name.replace("_", " ").title()
+
+class MsoTriggerPolarity(IntEnum):
+    POSITIVE = 0
+    NEGATIVE = 1
     def __str__(self):
         return self.name.replace("_", " ").title()
 
@@ -178,8 +194,8 @@ class DmmCurrentTerminal(IntEnum):
         return self.name.replace("_", " ").title()
 
 class DmmInputResistance(IntEnum):
-    ONE_HUNDRED_MEGAOHM = 0
-    TEN_GIGA_OHMS = 1
+    TEN_MEGA_OHM = 0
+    TEN_GIGA_OHM = 1
     def __str__(self):
         return self.name.replace("_", " ").title()
 
@@ -210,6 +226,8 @@ class I2cClockRate(IntEnum):
 
 class Status(IntEnum):
     SUCCESS = 0
+    ERROR_INPUT_TERMINATION_OVERLOADED = -375993
+    ERROR_ARB_CLIPPING = -375992
     ERROR_INVALID_OPERATION_FOR_MULTIPLE_CHANS_EDGE_TRIGGER = -375991
     ERROR_I2C_ARB_LOST = -375990
     ERROR_I2C_NAK = -375989
@@ -317,23 +335,23 @@ class Timestamp(Structure):
                 ("t4", c_uint32)]
 
 class PyVirtualBenchException(Exception):
-    def __init__(self, status, nilcicapi, libray_handle):
+    def __init__(self, status, nilcicapi, library_handle):
         self.status = status
         self.nilcicapi = nilcicapi
-        self.libray_handle = libray_handle
+        self.library_handle = library_handle
         self.language = Language.CURRENT_THREAD_LOCALE
 
     def __str__(self):
         descr_size = c_size_t(0)
         extended_err_size = c_size_t(0)
 
-        self.nilcicapi.niVB_GetErrorDescriptionW(self.libray_handle, self.status, self.language, None, 0, byref(descr_size))
+        self.nilcicapi.niVB_GetErrorDescriptionW(self.library_handle, self.status, self.language, None, 0, byref(descr_size))
         descr_buffer = (c_wchar * descr_size.value)()
-        self.nilcicapi.niVB_GetErrorDescriptionW(self.libray_handle, self.status, self.language, byref(descr_buffer), descr_size.value, None)
+        self.nilcicapi.niVB_GetErrorDescriptionW(self.library_handle, self.status, self.language, byref(descr_buffer), descr_size.value, None)
 
-        self.nilcicapi.niVB_GetExtendedErrorInformationW(self.libray_handle, self.language, None, 0, byref(extended_err_size))
+        self.nilcicapi.niVB_GetExtendedErrorInformationW(self.library_handle, self.language, None, 0, byref(extended_err_size))
         extended_err_buffer = (c_wchar * extended_err_size.value)()
-        self.nilcicapi.niVB_GetExtendedErrorInformationW(self.libray_handle, self.language, byref(extended_err_buffer), extended_err_size.value, None)
+        self.nilcicapi.niVB_GetExtendedErrorInformationW(self.library_handle, self.language, byref(extended_err_buffer), extended_err_size.value, None)
         return descr_buffer.value + "\n" + extended_err_buffer.value
 
 class PyVirtualBench:
@@ -352,18 +370,18 @@ class PyVirtualBench:
         '''
         self.device_name = device_name
         self.nilcicapi = cdll.LoadLibrary("nilcicapi")
-        self.libray_handle = c_int(0)
-        status = self.nilcicapi.niVB_Initialize(NIVB_LIBRARY_VERSION, byref(self.libray_handle))
+        self.library_handle = c_int(0)
+        status = self.nilcicapi.niVB_Initialize(NIVB_LIBRARY_VERSION, byref(self.library_handle))
         if (status != Status.SUCCESS):
-            raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+            raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
     def release(self):
         ''' Finalize the VirtualBench library.
         '''
-        status = self.nilcicapi.niVB_Finalize(self.libray_handle)
+        status = self.nilcicapi.niVB_Finalize(self.library_handle)
         if (status != Status.SUCCESS):
-            raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
-        self.libray_handle = None
+            raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+        self.library_handle = None
 
     def get_library_version(self):
         ''' Return the version of the VirtualBench runtime library.
@@ -371,7 +389,7 @@ class PyVirtualBench:
         version = c_uint32(0)
         status = self.nilcicapi.niVB_GetLibraryVersion(byref(version))
         if (status != Status.SUCCESS):
-            raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+            raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
         return version.value
 
     def convert_timestamp_to_values(self, timestamp):
@@ -381,7 +399,7 @@ class PyVirtualBench:
         fractional_seconds = c_double(0)
         status = self.nilcicapi.niVB_ConvertTimestampToValues(timestamp, byref(seconds_since_1970), byref(fractional_seconds))
         if (status != Status.SUCCESS):
-            raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+            raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
         return seconds_since_1970.value, fractional_seconds.value
 
     def convert_values_to_timestamp(self, seconds_since_1970, fractional_seconds):
@@ -390,21 +408,21 @@ class PyVirtualBench:
         timestamp = Timestamp(0, 0, 0, 0)
         status = self.nilcicapi.niVB_ConvertValuesToTimestamp(c_int64(seconds_since_1970), c_double(fractional_seconds), byref(timestamp))
         if (status != Status.SUCCESS):
-            raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+            raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
         return timestamp
 
     def add_network_device(self, ip_or_hostname, timeout_in_ms):
         ''' Adds a networked device to the system.
         '''
         device_name_size_out = c_size_t(0)
-        status = self.nilcicapi.niVB_AddNetworkDeviceW(self.libray_handle, c_wchar_p(ip_or_hostname), c_int32(timeout_in_ms), None, c_size_t(0), byref(device_name_size_out))
+        status = self.nilcicapi.niVB_AddNetworkDeviceW(self.library_handle, c_wchar_p(ip_or_hostname), c_int32(timeout_in_ms), None, c_size_t(0), byref(device_name_size_out))
         if (status != Status.SUCCESS):
-            raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+            raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
         device_name_size = c_size_t(device_name_size_out.value)
         device_name = (c_wchar * device_name_size)()
-        status = self.nilcicapi.niVB_AddNetworkDeviceW(self.libray_handle, c_wchar_p(ip_or_hostname), c_int32(timeout_in_ms), byref(device_name), c_size_t(device_name_size), byref(device_name_size_out))
+        status = self.nilcicapi.niVB_AddNetworkDeviceW(self.library_handle, c_wchar_p(ip_or_hostname), c_int32(timeout_in_ms), byref(device_name), c_size_t(device_name_size), byref(device_name_size_out))
         if (status != Status.SUCCESS):
-            raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+            raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
         return device_name.value
 
     def remove_device(self, device_name = ''):
@@ -412,24 +430,24 @@ class PyVirtualBench:
             via USB to be removed.
         '''
         local_device_name = device_name if device_name else self.device_name
-        status = self.nilcicapi.niVB_RemoveDeviceW(self.libray_handle, c_wchar_p(local_device_name))
+        status = self.nilcicapi.niVB_RemoveDeviceW(self.library_handle, c_wchar_p(local_device_name))
         if (status != Status.SUCCESS):
-            raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+            raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
     def collapse_channel_string(self, names_in):
         ''' Collapses a channel string into a comma and colon-delimited
             equivalent.
         '''
         names_out_size_out = c_size_t(0)
-        status = self.nilcicapi.niVB_CollapseChannelStringW(self.libray_handle, c_wchar_p(names_in), None, c_size_t(0), byref(names_out_size_out), None)
+        status = self.nilcicapi.niVB_CollapseChannelStringW(self.library_handle, c_wchar_p(names_in), None, c_size_t(0), byref(names_out_size_out), None)
         if (status != Status.SUCCESS):
-            raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
-        names_out_size = names_out_size_out.value
+            raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+        names_out_size = c_size_t(names_out_size_out.value)
         names_out = (c_wchar * names_out_size)()
         number_of_channels = c_size_t(0)
-        status = self.nilcicapi.niVB_CollapseChannelStringW(self.libray_handle, c_wchar_p(names_in), byref(names_out), c_size_t(names_out_size), None, byref(number_of_channels))
+        status = self.nilcicapi.niVB_CollapseChannelStringW(self.library_handle, c_wchar_p(names_in), byref(names_out), c_size_t(names_out_size), None, byref(number_of_channels))
         if (status != Status.SUCCESS):
-            raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+            raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
         return names_out.value, number_of_channels.value
 
     def expand_channel_string(self, names_in):
@@ -437,49 +455,53 @@ class PyVirtualBench:
             equivalent.
         '''
         names_out_size_out = c_size_t(0)
-        status = self.nilcicapi.niVB_ExpandChannelStringW(self.libray_handle, c_wchar_p(names_in), None, c_size_t(0), byref(names_out_size_out), None)
+        status = self.nilcicapi.niVB_ExpandChannelStringW(self.library_handle, c_wchar_p(names_in), None, c_size_t(0), byref(names_out_size_out), None)
         if (status != Status.SUCCESS):
-            raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
-        names_out_size = names_out_size_out.value
+            raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+        names_out_size = c_size_t(names_out_size_out.value)
         names_out = (c_wchar * names_out_size)()
         number_of_channels = c_size_t(0)
-        status = self.nilcicapi.niVB_ExpandChannelStringW(self.libray_handle, c_wchar_p(names_in), byref(names_out), c_size_t(names_out_size), None, byref(number_of_channels))
+        status = self.nilcicapi.niVB_ExpandChannelStringW(self.library_handle, c_wchar_p(names_in), byref(names_out), c_size_t(names_out_size), None, byref(number_of_channels))
         if (status != Status.SUCCESS):
-            raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+            raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
         return names_out.value, number_of_channels.value
 
     def login(self, device_name = '', username = 'admin', password = ''):
-        ''' Attempts to log in to a networked device.
+        ''' Attempts to log in to a networked device. Logging in to a device grants 
+            access to the permissions set for the specified user in NI Web-Based 
+            Monitoring and Configuration.
         '''
         local_device_name = device_name if device_name else self.device_name
-        status = self.nilcicapi.niVB_LogInW(self.libray_handle, c_wchar_p(local_device_name), c_wchar_p(username), c_wchar_p(password))
+        status = self.nilcicapi.niVB_LogInW(self.library_handle, c_wchar_p(local_device_name), c_wchar_p(username), c_wchar_p(password))
         if (status != Status.SUCCESS):
-            raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+            raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
     def logout(self, device_name = ''):
-        ''' Logs out of a networked device that you are logged in to.
+        ''' Logs out of a networked device that you are logged in to. Logging out of a 
+            device revokes access to the permissions set for the specified user in NI
+            Web-Based Monitoring and Configuration.
         '''
         local_device_name = device_name if device_name else self.device_name
-        status = self.nilcicapi.niVB_LogOutW(self.libray_handle, c_wchar_p(device_name))
+        status = self.nilcicapi.niVB_LogOutW(self.library_handle, c_wchar_p(device_name))
         if (status != Status.SUCCESS):
-            raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+            raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
     def set_calibration_information(self, calibration_date, calibration_interval, device_name = '', password = ''):
         ''' Sets calibration information for the specified device.
         '''
         local_device_name = device_name if device_name else self.device_name
-        status = self.nilcicapi.niVB_Cal_SetCalibrationInformationW(self.libray_handle, c_wchar_p(device_name), Timestamp(calibration_date), c_int32(calibration_interval), c_wchar_p(password))
+        status = self.nilcicapi.niVB_Cal_SetCalibrationInformationW(self.library_handle, c_wchar_p(device_name), Timestamp(calibration_date), c_int32(calibration_interval), c_wchar_p(password))
         if (status != Status.SUCCESS):
-            raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+            raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
     def set_calibration_password(self, current_password, new_password, device_name = ''):
         ''' Sets a new calibration password for the specified device. This
             method requires the current password for the device, and returns an
             error if the specified password is incorrect.
         '''
-        status = self.nilcicapi.niVB_Cal_SetCalibrationPasswordW(self.libray_handle, c_wchar_p(device_name), c_wchar_p(current_password), c_wchar_p(new_password))
+        status = self.nilcicapi.niVB_Cal_SetCalibrationPasswordW(self.library_handle, c_wchar_p(device_name), c_wchar_p(current_password), c_wchar_p(new_password))
         if (status != Status.SUCCESS):
-            raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+            raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
     def get_calibration_information(self, device_name = ''):
         ''' Returns calibration information for the specified device, including
@@ -489,9 +511,9 @@ class PyVirtualBench:
         calibration_date = Timestamp(0, 0, 0, 0)
         recommended_calibration_interval = c_int32(0)
         calibration_interval = c_int32(0)
-        status = self.nilcicapi.niVB_Cal_GetCalibrationInformationW(self.libray_handle, c_wchar_p(local_device_name), byref(calibration_date), byref(recommended_calibration_interval), byref(calibration_interval))
+        status = self.nilcicapi.niVB_Cal_GetCalibrationInformationW(self.library_handle, c_wchar_p(local_device_name), byref(calibration_date), byref(recommended_calibration_interval), byref(calibration_interval))
         if (status != Status.SUCCESS):
-            raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+            raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
         return calibration_date, recommended_calibration_interval.value, calibration_interval.value
 
 #------------------------------------------------------------------------------
@@ -505,12 +527,12 @@ class PyVirtualBench:
     class DigitalInputOutput(object):
         def __init__(self, outer, lines, reset):
             self.nilcicapi =  outer.nilcicapi
-            self.libray_handle = outer.libray_handle
+            self.library_handle = outer.library_handle
             self.lines = lines
             self.instrument_handle = c_int(0)
-            status = self.nilcicapi.niVB_Dig_InitializeW(self.libray_handle, c_wchar_p(self.lines), c_bool(reset), byref(self.instrument_handle))
+            status = self.nilcicapi.niVB_Dig_InitializeW(self.library_handle, c_wchar_p(self.lines), c_bool(reset), byref(self.instrument_handle))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def release(self):
             ''' Stops the session and deallocates any resources acquired during
@@ -519,7 +541,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_Dig_Close(self.instrument_handle)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             self.instrument_handle = c_int(0)
 
         def tristate_lines(self, lines):
@@ -527,14 +549,14 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_Dig_TristateLinesW(self.instrument_handle, c_wchar_p(lines))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def export_signal(self, line, digitalSignalSource):
             ''' Exports a signal to the specified line.
             '''
             status = self.nilcicapi.niVB_Dig_ExportSignalW(self.instrument_handle, c_wchar_p(line), c_int32(digitalSignalSource))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def query_line_configuration(self):
             ''' Indicates the current line configurations. Tristate Lines,
@@ -545,22 +567,20 @@ class PyVirtualBench:
             tristate_lines_size_out = c_size_t(0)
             static_lines_size_out = c_size_t(0)
             export_lines_size_out = c_size_t(0)
-
             status = self.nilcicapi.niVB_Dig_QueryLineConfigurationW(self.instrument_handle, None, c_size_t(0), byref(tristate_lines_size_out), None, c_size_t(0), byref(static_lines_size_out), None, c_size_t(0), byref(export_lines_size_out))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
-            tristate_lines_size = tristate_lines_size_out.value
-            static_lines_size = static_lines_size_out.value
-            export_lines_size = export_lines_size_out.value
-
+            tristate_lines_size = c_size_t(tristate_lines_size_out.value)
+            static_lines_size = c_size_t(static_lines_size_out.value)
+            export_lines_size = c_size_t(export_lines_size_out.value)
             tristate_lines = (c_wchar * tristate_lines_size)()
             static_lines = (c_wchar * static_lines_size)()
             export_lines = (c_wchar * export_lines_size)()
 
             status = self.nilcicapi.niVB_Dig_QueryLineConfigurationW(self.instrument_handle, byref(tristate_lines), c_size_t(tristate_lines_size), byref(tristate_lines_size_out), byref(static_lines), c_size_t(static_lines_size), byref(static_lines_size_out), byref(export_lines), c_size_t(export_lines_size), byref(export_lines_size_out))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return tristate_lines.value, static_lines.value, export_lines.value
 
         def query_export_signal(self, line):
@@ -570,7 +590,7 @@ class PyVirtualBench:
             signal = c_int32(0) # DigitalSignalSource
             status = self.nilcicapi.niVB_Dig_QueryExportSignalW(self.instrument_handle, c_wchar_p(line), byref(signal))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return DigitalSignalSource(signal.value)
 
         def write(self, lines, data):
@@ -579,21 +599,21 @@ class PyVirtualBench:
             local_data = ((c_bool) * len(data))(*data)
             status = self.nilcicapi.niVB_Dig_WriteW(self.instrument_handle, c_wchar_p(lines), local_data, c_size_t(len(local_data)))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def read(self, lines):
             ''' Reads the current state of the specified lines.
             '''
             data_size_out = c_size_t(0)
-            status = self.nilcicapi.niVB_Dig_ReadW(self.libray_handle, c_wchar_p(lines), None, c_size_t(0), byref(data_size_out))
+            status = self.nilcicapi.niVB_Dig_ReadW(self.library_handle, c_wchar_p(lines), None, c_size_t(0), byref(data_size_out))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             data_out = []
-            data_size = data_size_out.value
+            data_size = c_size_t(data_size_out.value)
             data = (c_bool * data_size)()
-            status = self.nilcicapi.niVB_Dig_ReadW(self.libray_handle, c_wchar_p(lines), data, c_size_t(data_size), byref(data_size_out))
+            status = self.nilcicapi.niVB_Dig_ReadW(self.library_handle, c_wchar_p(lines), data, c_size_t(data_size), byref(data_size_out))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             for i in range(data_size_out.value): data_out.append(data[i])
             return data_out
 
@@ -603,7 +623,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_Dig_ResetInstrument(self.instrument_handle)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
 #------------------------------------------------------------------------------
 
@@ -616,12 +636,12 @@ class PyVirtualBench:
     class FunctionGenerator(object):
         def __init__(self, outer, device_name, reset):
             self.nilcicapi =  outer.nilcicapi
-            self.libray_handle = outer.libray_handle
+            self.library_handle = outer.library_handle
             self.device_name = device_name if device_name else outer.device_name
             self.instrument_handle = c_int(0)
-            status = self.nilcicapi.niVB_FGEN_InitializeW(self.libray_handle, c_wchar_p(self.device_name), c_bool(reset), byref(self.instrument_handle))
+            status = self.nilcicapi.niVB_FGEN_InitializeW(self.library_handle, c_wchar_p(self.device_name), c_bool(reset), byref(self.instrument_handle))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def release(self):
             ''' Stops the session and deallocates any resources acquired during
@@ -630,7 +650,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_FGEN_Close(self.instrument_handle)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             self.instrument_handle = c_int(0)
 
         def configure_standard_waveform(self, waveform_function, amplitude, dc_offset, frequency, duty_cycle):
@@ -638,7 +658,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_FGEN_ConfigureStandardWaveform(self.instrument_handle, c_int32(waveform_function), c_double(amplitude), c_double(dc_offset), c_double(frequency), c_double(duty_cycle))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def configure_arbitrary_waveform(self, waveform_size, sample_period):
             ''' Configures the instrument to output a waveform. The waveform is
@@ -648,7 +668,7 @@ class PyVirtualBench:
             waveform = (c_double * waveform_size)()
             status = self.nilcicapi.niVB_FGEN_ConfigureArbitraryWaveform(self.instrument_handle, byref(waveform), c_size_t(waveform_size), c_double(sample_period))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return waveform.value
 
         def configure_arbitrary_waveform_gain_and_offset(self, gain, dc_offset):
@@ -659,14 +679,14 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_FGEN_ConfigureArbitraryWaveformGainAndOffset(self.instrument_handle, c_double(gain), c_double(dc_offset))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def enable_filter(self, enable_filter):
             ''' Enables or disables the filter on the instrument.
             '''
             status = self.nilcicapi.niVB_FGEN_EnableFilter(self.instrument_handle, c_bool(enable_filter))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def query_waveform_mode(self):
             ''' Indicates whether the waveform output by the instrument is a
@@ -675,7 +695,7 @@ class PyVirtualBench:
             waveform_mode = c_int32(0) # FGenWaveformMode
             status = self.nilcicapi.niVB_FGEN_QueryWaveformMode(self.instrument_handle, byref(waveform_mode))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return FGenWaveformMode(waveform_mode.value)
 
         def query_standard_waveform(self):
@@ -688,7 +708,7 @@ class PyVirtualBench:
             duty_cycle = c_double(0)
             status = self.nilcicapi.niVB_FGEN_QueryStandardWaveform(self.instrument_handle, byref(waveform_function), byref(amplitude), byref(dc_offset), byref(frequency), byref(duty_cycle))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return Waveform(waveform_function.value), amplitude.value, dc_offset.value, frequency.value, duty_cycle.value
 
         def query_arbitrary_waveform(self):
@@ -697,7 +717,7 @@ class PyVirtualBench:
             sample_rate = c_double(0)
             status = self.nilcicapi.niVB_FGEN_QueryArbitraryWaveform(self.instrument_handle, byref(sample_rate))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return sample_rate.value
 
         def query_arbitrary_waveform_gain_and_offset(self):
@@ -708,7 +728,7 @@ class PyVirtualBench:
             offset = c_double(0)
             status = self.nilcicapi.niVB_FGEN_QueryArbitraryWaveformGainAndOffset(self.instrument_handle, byref(gain), byref(offset))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return gain.value, offset.value
 
         def query_filter(self):
@@ -717,7 +737,7 @@ class PyVirtualBench:
             filter_enabled = c_bool(0)
             status = self.nilcicapi.niVB_FGEN_QueryFilter(self.instrument_handle, byref(filter_enabled))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return filter_enabled.value
 
         def query_generation_status(self):
@@ -726,7 +746,7 @@ class PyVirtualBench:
             generation_status = c_int32(0) # FgenGenerationStatus
             status = self.nilcicapi.niVB_FGEN_QueryGenerationStatus(self.instrument_handle, byref(generation_status))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return FGenGenerationStatus(generation_status.value)
 
         def run(self):
@@ -735,7 +755,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_FGEN_Run(self.instrument_handle)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def stop(self):
             ''' Transitions the acquisition from either the Triggered or Running
@@ -743,7 +763,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_FGEN_Stop(self.instrument_handle)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def reset_instrument(self):
             ''' Resets the session configuration to default values, and resets
@@ -751,7 +771,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_FGEN_ResetInstrument(self.instrument_handle)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def export_configuration(self, configuration_filename):
             ''' Exports a configuration file for use with the function
@@ -759,7 +779,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_FGEN_ExportConfigurationW(self.instrument_handle, c_wchar_p(configuration_filename))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def import_configuration(self, configuration_filename):
             ''' Imports a configuration file for use with the function
@@ -769,7 +789,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_FGEN_ImportConfigurationW(self.instrument_handle, c_wchar_p(configuration_filename))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
 #------------------------------------------------------------------------------
 
@@ -780,9 +800,9 @@ class PyVirtualBench:
         local_device_name = device_name if device_name else self.device_name
         adjustment_date = Timestamp(0, 0, 0, 0)
         adjustment_temperature = c_double(0)
-        status = self.nilcicapi.niVB_FGEN_GetCalibrationAdjustmentInformationW(self.libray_handle, c_wchar_p(local_device_name), byref(adjustment_date), byref(adjustment_temperature))
+        status = self.nilcicapi.niVB_FGEN_GetCalibrationAdjustmentInformationW(self.library_handle, c_wchar_p(local_device_name), byref(adjustment_date), byref(adjustment_temperature))
         if (status != Status.SUCCESS):
-            raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+            raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
         return adjustment_date, adjustment_temperature.value
 
     def acquire_function_generator_calibration(self, device_name = '', password = ''):
@@ -795,19 +815,19 @@ class PyVirtualBench:
     class FunctionGeneratorCalibration(object):
         def __init__(self, outer, device_name, password):
             self.nilcicapi =  outer.nilcicapi
-            self.libray_handle = outer.libray_handle
+            self.library_handle = outer.library_handle
             self.device_name = device_name if device_name else outer.device_name
             self.instrument_handle = c_int(0)
-            status = self.nilcicapi.niVB_FGEN_InitializeCalibrationW(self.libray_handle, c_wchar_p(self.device_name), c_wchar_p(password), self.instrument_handle)
+            status = self.nilcicapi.niVB_FGEN_InitializeCalibrationW(self.library_handle, c_wchar_p(self.device_name), c_wchar_p(password), self.instrument_handle)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def release(self, calibration_action = CalibrationAction.COMMIT):
             ''' Closes the calibration session, then resets the device.
             '''
             status = self.nilcicapi.niVB_FGEN_CloseCalibration(self.instrument_handle, c_int32(calibration_action))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             self.instrument_handle = c_int(0)
 
         def setup_offset_calibration(self, enable_filter):
@@ -816,7 +836,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_FGEN_SetupOffsetCalibration(self.instrument_handle, c_bool(enable_filter))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def adjust_offset_calibration(self, reference_value):
             ''' Stores a measured reference value to the instrument and
@@ -828,21 +848,30 @@ class PyVirtualBench:
             calibration_done = c_bool(0)
             status = self.nilcicapi.niVB_FGEN_AdjustOffsetCalibration(self.instrument_handle, c_double(reference_value), byref(calibration_done))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return calibration_done.value
 
-        def get_gain_calibration_adjustment_points(self, enable_filter_size, adjustment_point_size):
+        def get_gain_calibration_adjustment_points(self):
             ''' Returns the adjustment points and filter configurations needed
                 to sweep the instrument for adjustment.
             '''
-            enable_filter = c_bool(0)
+            enable_filter_out = []
             enable_filter_size_out = c_size_t(0)
-            adjustment_point = c_double(0)
+            adjustment_point_out = []
             adjustment_point_size_out = c_size_t(0)
-            status = self.nilcicapi.niVB_FGEN_GetGainCalibrationAdjustmentPoints(self.instrument_handle, byref(enable_filter), c_size_t(enable_filter_size), byref(enable_filter_size_out), byref(adjustment_point), adjustment_point_size, byref(adjustment_point_size_out))
+            status = self.nilcicapi.niVB_FGEN_GetGainCalibrationAdjustmentPoints(self.instrument_handle, None, c_size_t(0), byref(enable_filter_size_out), None, c_size_t(0), byref(adjustment_point_size_out))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
-            return enable_filter.value, enable_filter_size_out.value, adjustment_point.value, adjustment_point_size_out.value
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+            enable_filter_size = c_size_t(enable_filter_size_out.value)
+            adjustment_point_size = c_size_t(adjustment_point_size_out.value)
+            enable_filter = (c_bool * enable_filter_size)()
+            adjustment_point = (c_double * adjustment_point_size)()
+            status = self.nilcicapi.niVB_FGEN_GetGainCalibrationAdjustmentPoints(self.instrument_handle, byref(enable_filter), c_size_t(enable_filter_size), byref(enable_filter_size_out), byref(adjustment_point), c_size_t(adjustment_point_size), byref(adjustment_point_size_out))
+            if (status != Status.SUCCESS):
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+            for i in range(enable_filter_size.value): enable_filter_out.append(enable_filter[i])
+            for i in range(adjustment_point_size.value): adjustment_point_out.append(adjustment_point[i])
+            return enable_filter_out, adjustment_point_out
 
         def setup_gain_calibration(self, enable_filter, adjustment_point):
             ''' Configures the instrument to output the values returned by FGEN
@@ -850,7 +879,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_FGEN_SetupGainCalibration(self.instrument_handle, c_bool(enable_filter), c_double(adjustment_point))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def adjust_gain_calibration(self, reference_value):
             ''' Stores a measured reference value to the instrument and
@@ -861,7 +890,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_FGEN_AdjustGainCalibration(self.instrument_handle, c_double(reference_value))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
 #------------------------------------------------------------------------------
 
@@ -874,12 +903,12 @@ class PyVirtualBench:
     class MixedSignalOscilloscope(object):
         def __init__(self, outer, device_name, reset):
             self.nilcicapi =  outer.nilcicapi
-            self.libray_handle = outer.libray_handle
+            self.library_handle = outer.library_handle
             self.device_name = device_name if device_name else outer.device_name
             self.instrument_handle = c_int(0)
-            status = self.nilcicapi.niVB_MSO_InitializeW(self.libray_handle, c_wchar_p(self.device_name), c_bool(reset), byref(self.instrument_handle))
+            status = self.nilcicapi.niVB_MSO_InitializeW(self.library_handle, c_wchar_p(self.device_name), c_bool(reset), byref(self.instrument_handle))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def release(self):
             ''' Removes the session and deallocates any resources acquired
@@ -888,7 +917,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_MSO_Close(self.instrument_handle)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             self.instrument_handle = c_int(0)
 
         def auto_setup(self):
@@ -896,14 +925,14 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_MSO_Autosetup(self.instrument_handle)
             if (status != Status.SUCCESS and status <= 0):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def configure_analog_channel(self, channel, enable_channel, vertical_range, vertical_offset, probe_attenuation, vertical_coupling):
             ''' Configures the settings of the specified analog channel.
             '''
             status = self.nilcicapi.niVB_MSO_ConfigureAnalogChannelW(self.instrument_handle, c_wchar_p(channel), c_bool(enable_channel), c_double(vertical_range), c_double(vertical_offset), c_int32(probe_attenuation), c_int32(vertical_coupling))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def configure_analog_channel_characteristics(self, channel, input_impedance, bandwidth_limit):
             ''' Configures the properties that control the electrical
@@ -911,28 +940,28 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_MSO_ConfigureAnalogChannelCharacteristicsW(self.instrument_handle, c_wchar_p(channel), c_int32(input_impedance), c_double(bandwidth_limit))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def enable_digital_channels(self, channel, enable_channel):
             ''' Enables or disables the specified digital channels.
             '''
             status = self.nilcicapi.niVB_MSO_EnableDigitalChannelsW(self.instrument_handle, c_wchar_p(channel), c_bool(enable_channel))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def configure_digital_threshold(self, threshold):
             ''' Configures the threshold level for logic analyzer lines.
             '''
             status = self.nilcicapi.niVB_MSO_ConfigureDigitalThreshold(self.instrument_handle, c_double(threshold))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def configure_timing(self, sample_rate, acquisition_time, pretrigger_time, sampling_mode):
             ''' Configures the basic timing settings of the instrument.
             '''
             status = self.nilcicapi.niVB_MSO_ConfigureTiming(self.instrument_handle, c_double(sample_rate), c_double(acquisition_time), c_double(pretrigger_time), c_int32(sampling_mode))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def configure_advanced_digital_timing(self, digital_sample_rate_control, digital_sample_rate, buffer_control, buffer_pretrigger_percent):
             ''' Configures the rate and buffer settings of the logic analyzer.
@@ -941,7 +970,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_MSO_ConfigureAdvancedDigitalTiming(self.instrument_handle, c_int32(digital_sample_rate_control), c_double(digital_sample_rate), c_int32(buffer_control), c_double(buffer_pretrigger_percent))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def configure_state_mode(self, enable, clock_channel, clock_edge):
             ''' Configures how to clock data on the logic analyzer channels that
@@ -949,7 +978,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_MSO_ConfigureStateModeW(self.instrument_handle, c_bool(enable), c_wchar_p(clock_channel), c_int32(clock_edge))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def configure_immediate_trigger(self):
             ''' Configures a trigger to immediately activate on the specified
@@ -957,7 +986,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_MSO_ConfigureImmediateTrigger(self.instrument_handle)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def configure_analog_edge_trigger(self, trigger_source, trigger_slope, trigger_level, trigger_hysteresis, trigger_instance):
             ''' Configures a trigger to activate on the specified source when
@@ -965,7 +994,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_MSO_ConfigureAnalogEdgeTriggerW(self.instrument_handle, c_wchar_p(trigger_source), c_int32(trigger_slope), c_double(trigger_level), c_double(trigger_hysteresis), c_int32(trigger_instance))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def configure_digital_edge_trigger(self, trigger_source, trigger_slope, trigger_instance):
             ''' Configures a trigger to activate on the specified source when
@@ -973,7 +1002,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_MSO_ConfigureDigitalEdgeTriggerW(self.instrument_handle, c_wchar_p(trigger_source), c_int32(trigger_slope), c_int32(trigger_instance))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def configure_digital_pattern_trigger(self, trigger_source, trigger_pattern, trigger_instance):
             ''' Configures a trigger to activate on the specified channels when
@@ -985,7 +1014,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_MSO_ConfigureDigitalPatternTriggerW(self.instrument_handle, c_wchar_p(trigger_source), c_wchar_p(trigger_pattern), c_int32(trigger_instance))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def configure_digital_glitch_trigger(self, trigger_source, trigger_instance):
             ''' Configures a trigger to activate on the specified channels when
@@ -996,7 +1025,23 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_MSO_ConfigureDigitalGlitchTriggerW(self.instrument_handle, c_wchar_p(trigger_source), c_int32(trigger_instance))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+
+        def configure_analog_pulse_width_trigger(self, trigger_source, trigger_polarity, trigger_level, comparison_mode, lower_limit, upper_limit, trigger_instance):
+            ''' Configures a trigger to activate on the specified source when the analog 
+                edge reaches the specified levels within a specified window of time.
+            '''
+            status = self.nilcicapi.niVB_MSO_ConfigureAnalogPulseWidthTriggerW(self.instrument_handle, c_wchar_p(trigger_source), c_int32(trigger_polarity), c_double(trigger_level), c_int32(comparison_mode), c_double(lower_limit), c_double(upper_limit), c_int32(trigger_instance))
+            if (status != Status.SUCCESS):
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+
+        def configure_digital_pulse_width_trigger(self, trigger_source, trigger_polarity, comparison_mode, lower_limit, upper_limit, trigger_instance):
+            ''' Configures a trigger to activate on the specified source when the digital 
+                edge reaches the specified levels within a specified window of time.
+            '''
+            status = self.nilcicapi.niVB_MSO_ConfigureDigitalPulseWidthTriggerW(self.instrument_handle, c_wchar_p(trigger_source), c_int32(trigger_polarity), c_int32(comparison_mode), c_double(lower_limit), c_double(upper_limit), c_int32(trigger_instance))
+            if (status != Status.SUCCESS):
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def configure_trigger_delay(self, trigger_delay):
             ''' Configures the amount of time to wait after a trigger condition
@@ -1004,7 +1049,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_MSO_ConfigureTriggerDelay(self.instrument_handle, c_double(trigger_delay))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def query_analog_channel(self, channel):
             ''' Indicates the vertical configuration of the specified channel.
@@ -1016,32 +1061,32 @@ class PyVirtualBench:
             vertical_coupling = c_int32(0)
             status = self.nilcicapi.niVB_MSO_QueryAnalogChannelW(self.instrument_handle, c_wchar_p(channel), byref(channel_enabled), byref(vertical_range), byref(vertical_offset), byref(probe_attenuation), c_int32(vertical_coupling))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return channel_enabled.value, vertical_range.value, vertical_offset.value, MsoProbeAttenuation(probe_attenuation.value), MsoCoupling(vertical_coupling.value)
 
         def query_enabled_analog_channels(self):
             ''' No documentation
             '''
-            channelsSizeOut = c_size_t(0)
-            status = self.nilcicapi.niVB_MSO_QueryEnabledAnalogChannelsW(self.instrument_handle, None, None, byref(channelsSizeOut))
+            channels_size_out = c_size_t(0)
+            status = self.nilcicapi.niVB_MSO_QueryEnabledAnalogChannelsW(self.instrument_handle, None, c_size_t(0), byref(channels_size_out))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
-            channelsSize = channelsSizeOut.value
-            channels = (c_wchar * channelsSize)()
-            status = self.nilcicapi.niVB_MSO_QueryEnabledAnalogChannelsW(self.instrument_handle, byref(channels), c_size_t(channelsSize), None)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+            channels_size = channels_size_out.value
+            channels = (c_wchar * channels_size)()
+            status = self.nilcicapi.niVB_MSO_QueryEnabledAnalogChannelsW(self.instrument_handle, byref(channels), c_size_t(channels_size), byref(channels_size_out))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return channels.value
 
         def query_analog_channel_characteristics(self, channel):
-            ''' Indicates the properties that control the electrical
-                characteristics of the specified channel.
+            ''' Indicates the properties that control the electrical characteristics of the specified channel.
+                This method returns an error if too much power is applied to the channel.
             '''
             input_impedance = c_int32(0)
             bandwidth_limit = c_double(0)
             status = self.nilcicapi.niVB_MSO_QueryAnalogChannelCharacteristicsW(self.instrument_handle, c_wchar_p(channel), byref(input_impedance), byref(bandwidth_limit))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return MsoInputImpedance(input_impedance.value), bandwidth_limit.value
 
         def query_digital_channel(self):
@@ -1050,21 +1095,21 @@ class PyVirtualBench:
             channel_enabled = c_bool(0)
             status = self.nilcicapi.niVB_MSO_QueryDigitalChannelW(self.instrument_handle, c_wchar_p(channel), byref(channel_enabled))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return channel_enabled.value
 
         def query_enabled_digital_channels(self):
             ''' No documentation
             '''
             channels_size_out = c_size_t(0)
-            status = self.nilcicapi.niVB_MSO_QueryEnabledDigitalChannelsW(self.instrument_handle, None, None, byref(channels_size_out))
+            status = self.nilcicapi.niVB_MSO_QueryEnabledDigitalChannelsW(self.instrument_handle, None, c_size_t(0), byref(channels_size_out))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             channels_size = channels_size_out.value
             channels = (c_wchar * channels_size)()
             status = self.nilcicapi.niVB_MSO_QueryEnabledDigitalChannelsW(self.instrument_handle, byref(channels), c_size_t(channels_size), byref(channels_size_out))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return channels.value
 
         def query_digital_threshold(self):
@@ -1074,7 +1119,7 @@ class PyVirtualBench:
             threshold = c_double(0)
             status = self.nilcicapi.niVB_MSO_QueryDigitalThreshold(self.instrument_handle, byref(threshold))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return threshold.value
 
         def query_timing(self):
@@ -1086,7 +1131,7 @@ class PyVirtualBench:
             sampling_mode = c_int32(0) # MsoSamplingMode
             status = self.nilcicapi.niVB_MSO_QueryTiming(self.instrument_handle, byref(sample_rate), byref(acquisition_time), byref(pretrigger_time), byref(sampling_mode))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return sample_rate.value, acquisition_time.value, pretrigger_time.value, MsoSamplingMode(sampling_mode.value)
 
         def query_advanced_digital_timing(self):
@@ -1098,7 +1143,7 @@ class PyVirtualBench:
             buffer_pretrigger_percent = c_double(0)
             status = self.nilcicapi.niVB_MSO_QueryAdvancedDigitalTiming(self.instrument_handle, byref(digital_sample_rate_control), byref(digital_sample_rate), byref(buffer_control), byref(buffer_pretrigger_percent))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return MsoDigitalSampleRateControl(digital_sample_rate_control.value), digital_sample_rate.value, MsoBufferControl(buffer_control.value), buffer_pretrigger_percent.value
 
         def query_state_mode(self, clockChannelSize):
@@ -1107,14 +1152,14 @@ class PyVirtualBench:
             clock_channel_size_out = c_size_t(0)
             status = self.nilcicapi.niVB_MSO_QueryStateModeW(self.instrument_handle, None,  None, c_size_t(0), byref(clock_channel_size_out), None)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             state_mode_enabled = c_bool(0)
             clock_channel_size = c_size_t(clock_channel_size_out.value)
             clock_channel = (c_wchar * clock_channel_size.value)()
             clock_edge = c_int32(0) # EdgeWithEither
             status = self.nilcicapi.niVB_MSO_QueryStateModeW(self.instrument_handle, byref(state_mode_enabled),  byref(clock_channel), c_size_t(clock_channel_size), byref(clock_channel_size_out), byref(clock_edge))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return state_mode_enabled.value, clock_channel.value, EdgeWithEither(clock_edge.value)
 
         def query_trigger_type(self, trigger_instance):
@@ -1123,36 +1168,44 @@ class PyVirtualBench:
             trigger_type = c_int32(0) # MsoTriggerType
             status = self.nilcicapi.niVB_MSO_QueryTriggerType(self.instrument_handle, c_int32(trigger_instance), byref(trigger_type))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return MsoTriggerType(trigger_type.value)
 
-        def query_analog_edge_trigger(self, trigger_instance, trigger_source_size):
+        def query_analog_edge_trigger(self, trigger_instance):
             ''' Indicates the analog edge trigger configuration of the specified
                 instance.
             '''
-            trigger_source = (c_wchar * trigger_source_size)()
             trigger_source_size_out = c_size_t(0)
             trigger_slope = c_int32(0) # EdgeWithEither
             trigger_level = c_double(0)
             trigger_hysteresis = c_double(0)
+            status = self.nilcicapi.niVB_MSO_QueryAnalogEdgeTriggerW(self.instrument_handle, c_int32(trigger_instance), None, c_size_t(0), byref(trigger_source_size_out), byref(trigger_slope), byref(trigger_level), byref(trigger_hysteresis))
+            if (status != Status.SUCCESS):
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+            trigger_source_size = c_size_t(trigger_source_size_out.value)
+            trigger_source = (c_wchar * trigger_source_size)()
             status = self.nilcicapi.niVB_MSO_QueryAnalogEdgeTriggerW(self.instrument_handle, c_int32(trigger_instance), byref(trigger_source), c_size_t(trigger_source_size), byref(trigger_source_size_out), byref(trigger_slope), byref(trigger_level), byref(trigger_hysteresis))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return trigger_source.value, EdgeWithEither(trigger_slope.value), trigger_level.value, trigger_hysteresis.value
 
-        def query_digital_edge_trigger(self, trigger_instance, trigger_source_size):
+        def query_digital_edge_trigger(self, trigger_instance):
             ''' Indicates the digital trigger configuration of the specified
                 instance.
             '''
-            trigger_source = (c_wchar * trigger_source_size)()
             trigger_source_size_out = c_size_t(0)
             trigger_slope = c_int32(0) # EdgeWithEither
+            status = self.nilcicapi.niVB_MSO_QueryDigitalEdgeTriggerW(self.instrument_handle, c_int32(trigger_instance), None, c_size_t(0), byref(trigger_source_size_out), byref(trigger_slope))
+            if (status != Status.SUCCESS):
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+            trigger_source_size = c_size_t(trigger_source_size_out.value)
+            trigger_source = (c_wchar * trigger_source_size)()
             status = self.nilcicapi.niVB_MSO_QueryDigitalEdgeTriggerW(self.instrument_handle, c_int32(trigger_instance), byref(trigger_source), c_size_t(trigger_source_size), byref(trigger_source_size_out), byref(trigger_slope))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return trigger_source.value, EdgeWithEither(trigger_slope.value)
 
-        def query_digital_pattern_trigger(self, trigger_instance, trigger_source_size, trigger_pattern_size):
+        def query_digital_pattern_trigger(self, trigger_instance):
             ''' Indicates the digital pattern trigger configuration of the
                 specified instance. A trigger is produced when every level
                 (high/low) requirement specified in Trigger Pattern is met, and
@@ -1160,26 +1213,35 @@ class PyVirtualBench:
                 met. If no toggling requirements are set, then only the level
                 requirements must be met to produce a trigger.
             '''
-            trigger_source = (c_wchar * trigger_source_size)()
             trigger_source_size_out = c_size_t(0)
-            trigger_pattern = (c_wchar * trigger_pattern_size)()
             trigger_pattern_size_out = c_size_t(0)
+            status = self.nilcicapi.niVB_MSO_QueryDigitalPatternTriggerW(self.instrument_handle, c_int32(trigger_instance), None, c_size_t(0), byref(trigger_source_size_out), None, c_size_t(0), byref(trigger_pattern_size_out))
+            if (status != Status.SUCCESS):
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+            trigger_source_size = c_size_t(trigger_source_size_out.value)
+            trigger_source = (c_wchar * trigger_source_size)()
+            trigger_pattern_size = c_size_t(trigger_pattern_size_out.value)
+            trigger_pattern = (c_wchar * trigger_pattern_size)()
             status = self.nilcicapi.niVB_MSO_QueryDigitalPatternTriggerW(self.instrument_handle, c_int32(trigger_instance), byref(trigger_source), c_size_t(trigger_source_size), byref(trigger_source_size_out), byref(trigger_pattern), c_size_t(trigger_pattern_size), byref(trigger_pattern_size_out))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return trigger_source.value, trigger_pattern.value
 
-        def query_digital_glitch_trigger(self, trigger_instance, trigger_source_size):
+        def query_digital_glitch_trigger(self, trigger_instance):
             ''' Indicates the digital glitch trigger configuration of the
                 specified instance. A glitch occurs when a channel in Trigger
                 Source toggles between two edges of the sample clock. This may
                 happen when the sampling rate is less than 1 GHz.
             '''
-            trigger_source = (c_wchar * trigger_source_size)()
             trigger_source_size_out = c_size_t(0)
+            status = self.nilcicapi.niVB_MSO_QueryDigitalGlitchTriggerW(self.instrument_handle, c_int32(trigger_instance), None, c_size_t(0), byref(trigger_source_size_out))
+            if (status != Status.SUCCESS):
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+            trigger_source_size = c_size_t(trigger_source_size_out.value)
+            trigger_source = (c_wchar * trigger_source_size)()
             status = self.nilcicapi.niVB_MSO_QueryDigitalGlitchTriggerW(self.instrument_handle, c_int32(trigger_instance), byref(trigger_source), c_size_t(trigger_source_size), byref(trigger_source_size_out))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return trigger_source.value
 
         def query_trigger_delay(self):
@@ -1188,8 +1250,48 @@ class PyVirtualBench:
             trigger_delay = c_double(0)
             status = self.nilcicapi.niVB_MSO_QueryTriggerDelay(self.instrument_handle, byref(trigger_delay))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return trigger_delay.value
+
+        def query_analog_pulse_width_trigger(self, trigger_instance):
+            ''' Indicates the analog pulse width trigger configuration of the specified 
+                instance.
+            '''
+            trigger_source_size_out = c_size_t(0)
+            trigger_polarity = c_int32(0)
+            trigger_level = c_double(0)
+            comparison_mode = c_int32(0)
+            lower_limit = c_double(0)
+            upper_limit = c_double(0)
+            status = self.nilcicapi.niVB_MSO_QueryAnalogPulseWidthTriggerW(self.instrument_handle, c_int32(trigger_instance), None, c_size_t(0), byref(trigger_source_size_out), byref(trigger_polarity), byref(trigger_level), byref(comparison_mode), byref(lower_limit), byref(upper_limit))
+            if (status != Status.SUCCESS):
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+            trigger_source_size = c_size_t(trigger_source_size_out.value)
+            trigger_source = (c_wchar * trigger_source_size)()
+            status = self.nilcicapi.niVB_MSO_QueryAnalogPulseWidthTriggerW(self.instrument_handle, c_int32(trigger_instance), byref(trigger_source), c_size_t(trigger_source_size), byref(trigger_source_size_out), byref(trigger_polarity), byref(trigger_level), byref(comparison_mode), byref(lower_limit), byref(upper_limit))
+            if (status != Status.SUCCESS):
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+            return trigger_source.value, MsoTriggerPolarity(trigger_polarity.value), trigger_level.value, MsoComparisonMode(comparison_mode.value), lower_limit.value, upper_limit.value
+
+        def query_digital_pulse_width_trigger(self, trigger_instance):
+            ''' Indicates the digital pulse width trigger configuration of the specified 
+                instance.
+            '''
+            trigger_source_size_out = c_size_t(0)
+            trigger_polarity = c_int32(0)
+            trigger_level = c_double(0)
+            comparison_mode = c_int32(0)
+            lower_limit = c_double(0)
+            upper_limit = c_double(0)
+            status = self.nilcicapi.niVB_MSO_QueryDigitalPulseWidthTriggerW(self.instrument_handle, c_int32(trigger_instance), None, c_size_t(0), byref(trigger_source_size_out), byref(trigger_polarity), byref(comparison_mode), byref(lower_limit), byref(upper_limit))
+            if (status != Status.SUCCESS):
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+            trigger_source_size = c_size_t(trigger_source_size_out.value)
+            trigger_source = (c_wchar * trigger_source_size)()
+            status = self.nilcicapi.niVB_MSO_QueryDigitalPulseWidthTriggerW(self.instrument_handle, c_int32(trigger_instance), byref(trigger_source), c_size_t(trigger_source_size), byref(trigger_source_size_out), byref(trigger_polarity), byref(comparison_mode), byref(lower_limit), byref(upper_limit))
+            if (status != Status.SUCCESS):
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+            return trigger_source.value, MsoTriggerPolarity(trigger_polarity.value), MsoComparisonMode(comparison_mode.value), lower_limit.value, upper_limit.value
 
         def query_acquisition_status(self):
             ''' Returns the status of a completed or ongoing acquisition.
@@ -1197,18 +1299,19 @@ class PyVirtualBench:
             acquisition_status = c_int32(0) # MsoAcquisitionStatus
             status = self.nilcicapi.niVB_MSO_QueryAcquisitionStatus(self.instrument_handle, byref(acquisition_status))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return MsoAcquisitionStatus(acquisition_status.value)
 
         def run(self, autoTrigger = True):
-            ''' Transitions the acquisition from the Stopped state to the
-                Running state. If the current state is Triggered, the
+            ''' Transitions the acquisition from the Stopped state to the 
+                Running state. If the current state is Triggered, the 
                 acquisition is first transitioned to the Stopped state before
-                transitioning to the Running state.
-            '''
+                transitioning to the Running state. This method returns an 
+                error if too much power is applied to any enabled channel.
+            ''' 
             status = self.nilcicapi.niVB_MSO_Run(self.instrument_handle, c_bool(autoTrigger))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def force_trigger(self):
             ''' Causes a software-timed trigger to occur after the pretrigger
@@ -1216,7 +1319,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_MSO_ForceTrigger(self.instrument_handle)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def stop(self):
             ''' Transitions the acquisition from either the Triggered or Running
@@ -1224,7 +1327,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_MSO_Stop(self.instrument_handle)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def read_analog(self, data_size):
             ''' Transfers data from the instrument as long as the acquisition
@@ -1243,7 +1346,7 @@ class PyVirtualBench:
                                                         byref(data), c_size_t(data_size), byref(data_size_out),
                                                         byref(data_stride), byref(initial_timestamp), byref(trigger_timestamp), byref(trigger_reason))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return data.value, data_stride.value, initial_timestamp, trigger_timestamp, MsoTriggerReason(trigger_reason.value)
 
         def read_digital_u64(self, data_size, sample_timestamps_size):
@@ -1265,7 +1368,7 @@ class PyVirtualBench:
                                                             byref(sampleTimestamps), c_size_t(sample_timestamps_size), byref(sampleTimestampsSizeOut),
                                                             byref(initial_timestamp), byref(trigger_timestamp), byref(trigger_reason))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return data.value, sampleTimestamps.value, initial_timestamp, trigger_timestamp, MsoTriggerReason(trigger_reason.value)
 
         def read_analog_digital_u64(self):
@@ -1296,7 +1399,7 @@ class PyVirtualBench:
                     None,                           # niVB_Timestamp* trigger_timestamp
                     None)                           # niVB_MSO_TriggerReason* trigger_reason
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
             analog_data_size = analog_data_size_out.value
             digital_data_size = digital_data_size_out.value
@@ -1333,7 +1436,7 @@ class PyVirtualBench:
                     byref(trigger_timestamp),         # niVB_Timestamp* trigger_timestamp
                     byref(trigger_reason))            # niVB_MSO_TriggerReason* trigger_reason
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             for i in range(analog_data_size): analog_data_out.append(analog_data[i])
             for i in range(digital_data_size): digital_data_out.append(digital_data[i])
             for i in range(digital_timestamps_size): digital_timestamps_out.append(digital_timestamps[i])
@@ -1345,14 +1448,14 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_MSO_ResetInstrument(self.instrument_handle)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def export_configuration(self, configuration_filename):
             ''' Exports a configuration file for use with the MSO.
             '''
             status = self.nilcicapi.niVB_MSO_ExportConfigurationW(self.instrument_handle, c_wchar_p(configuration_filename))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def import_configuration(self, configuration_filename):
             ''' Imports a configuration file for use with the MSO. You can
@@ -1361,7 +1464,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_MSO_ImportConfigurationW(self.instrument_handle, c_wchar_p(configuration_filename))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
 #------------------------------------------------------------------------------
 
@@ -1372,9 +1475,9 @@ class PyVirtualBench:
         local_device_name = device_name if device_name else self.device_name
         adjustment_date = Timestamp(0, 0, 0, 0)
         adjustment_temperature = c_double(0)
-        status = self.nilcicapi.niVB_MSO_GetCalibrationAdjustmentInformationW(self.libray_handle, c_wchar_p(local_device_name), byref(adjustment_date), byref(adjustment_temperature))
+        status = self.nilcicapi.niVB_MSO_GetCalibrationAdjustmentInformationW(self.library_handle, c_wchar_p(local_device_name), byref(adjustment_date), byref(adjustment_temperature))
         if (status != Status.SUCCESS):
-            raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+            raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
         return adjustment_date, adjustment_temperature.value
 
     def acquire_mixed_signal_oscilloscope_calibration(self, device_name = '', password = ''):
@@ -1387,19 +1490,19 @@ class PyVirtualBench:
     class MixedSignalOscilloscopeCalibration(object):
         def __init__(self, outer, device_name, password):
             self.nilcicapi =  outer.nilcicapi
-            self.libray_handle = outer.libray_handle
+            self.library_handle = outer.library_handle
             self.device_name = device_name if device_name else outer.device_name
             self.instrument_handle = c_int(0)
-            status = self.nilcicapi.niVB_MSO_InitializeCalibrationW(self.libray_handle, c_wchar_p(self.device_name), c_wchar_p(password), self.instrument_handle)
+            status = self.nilcicapi.niVB_MSO_InitializeCalibrationW(self.library_handle, c_wchar_p(self.device_name), c_wchar_p(password), self.instrument_handle)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def release(self, calibration_action = CalibrationAction.COMMIT):
             ''' Closes the calibration session, then resets the device.
             '''
             status = self.nilcicapi.niVB_MSO_CloseCalibration(self.instrument_handle, c_int32(calibration_action))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             self.instrument_handle = c_int(0)
 
         def adjust_offset_calibration(self, channel):
@@ -1408,7 +1511,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_MSO_AdjustOffsetCalibrationW(self.instrument_handle, c_wchar_p(channel))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def get_compensator_attenuation_calibration_adjustment_points(self):
             ''' Returns the configuration values necessary for MSO Adjust
@@ -1418,14 +1521,12 @@ class PyVirtualBench:
             range_data_size_out = c_size_t(0)
             amplitude_size_out = c_size_t(0)
             frequency_size_out = c_size_t(0)
-
             status = self.nilcicapi.niVB_MSO_GetCompensatorAttenuationCalibrationAdjustmentPoints(self.instrument_handle, None, c_size_t(0), byref(range_data_size_out), None, c_size_t(0), byref(amplitude_size_out), None, c_size_t(0), byref(frequency_size_out))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
-
-            range_data_size = range_data_size_out.value
-            amplitude_size = amplitude_size_out.value
-            frequency_size = frequency_size_out.value
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+            range_data_size = c_size_t(range_data_size_out.value)
+            amplitude_size = c_size_t(amplitude_size_out.value)
+            frequency_size = c_size_t(frequency_size_out.value)
 
             range_data_out = []
             amplitude_out = []
@@ -1437,7 +1538,7 @@ class PyVirtualBench:
 
             status = self.nilcicapi.niVB_MSO_GetCompensatorAttenuationCalibrationAdjustmentPoints(self.instrument_handle, byref(range_data), c_size_t(range_data_size), byref(range_data_size_out), byref(amplitude), c_size_t(amplitude_size), byref(amplitude_size_out), byref(frequency), c_size_t(frequency_size), byref(frequency_size_out))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             for i in range(range_data_size_out.value): range_data_out.append(range_data[i])
             for i in range(amplitude_size_out.value): amplitude_out.append(amplitude[i])
             for i in range(frequency_size_out.value): frequency_out.append(frequency[i])
@@ -1449,19 +1550,24 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_MSO_AdjustCompensatorAttenuationCalibrationW(self.instrument_handle, c_wchar_p(channel), c_double(range_data), c_double(amplitude), c_double(frequency))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
-        def get_range_calibration_adjustment_points(self, range_data_size, adjustment_point_size):
+        def get_range_calibration_adjustment_points(self):
             ''' Returns the adjustment points and range_data values needed to sweep
                 the instrument for adjustment.
             '''
-            range_data = (c_double * range_data_size)()
             range_data_size_out = c_size_t(0)
-            adjustment_point = (c_double * adjustment_point_size)()
             adjustment_point_size_out = c_size_t(0)
+            status = self.nilcicapi.niVB_MSO_GetRangeCalibrationAdjustmentPoints(self.instrument_handle, None, c_size_t(0), byref(range_data_size_out), None, c_size_t(0), byref(adjustment_point_size_out))
+            if (status != Status.SUCCESS):
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+            range_data_size = c_size_t(range_data_size_out.value)
+            adjustment_point_size = c_size_t(adjustment_point_size_out.value)
+            range_data = (c_double * range_data_size)()
+            adjustment_point = (c_double * adjustment_point_size)()
             status = self.nilcicapi.niVB_MSO_GetRangeCalibrationAdjustmentPoints(self.instrument_handle, byref(range_data), c_size_t(range_data_size), byref(range_data_size_out), byref(adjustment_point), c_size_t(adjustment_point_size), byref(adjustment_point_size_out))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return range_data.value, adjustment_point.value
 
         def adjust_range_calibration(self, channel, range_data, adjustment_point):
@@ -1471,20 +1577,26 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_MSO_AdjustRangeCalibrationW(self.instrument_handle, c_wchar_p(channel), c_double(range_data), c_double(adjustment_point))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
-        def get_offset_dac_calibration_adjustment_points(self, range_data_size, adjustment_point_size):
+        def get_offset_dac_calibration_adjustment_points(self):
             ''' Returns the adjustment point and range_data values necessary for MSO
                 Adjust Offset DAC Calibration. Each element of the Range and
                 Adjustment Point arrays correspond to each other.
             '''
-            range_data = (c_double * range_data_size)()
             range_data_size_out = c_size_t(0)
-            adjustment_point = (c_double * adjustment_point_size)()
             adjustment_point_size_out = c_size_t(0)
+            status = self.nilcicapi.niVB_MSO_GetOffsetDACCalibrationAdjustmentPoints(self.instrument_handle, None, c_size_t(0), byref(range_data_size_out), None, c_size_t(0), byref(adjustment_point_size_out))
+            if (status != Status.SUCCESS):
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+            range_data_size = c_size_t(range_data_size_out.value)
+            range_data = (c_double * range_data_size)()
+            adjustment_point_size = c_size_t(adjustment_point_size_out.value)
+            adjustment_point = (c_double * adjustment_point_size)()
             status = self.nilcicapi.niVB_MSO_GetOffsetDACCalibrationAdjustmentPoints(self.instrument_handle, byref(range_data), c_size_t(range_data_size), byref(range_data_size_out), byref(adjustment_point), c_size_t(adjustment_point_size), byref(adjustment_point_size_out))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+            return range_data.value, adjustment_point.value
 
         def adjust_offset_dac_calibration(self, channel, range_data, adjustment_point):
             ''' Configures the instrument on the specified channel using the
@@ -1494,7 +1606,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_MSO_AdjustOffsetDACCalibrationW(self.instrument_handle, c_wchar_p(channel), c_double(range_data), c_double(adjustment_point))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
 #------------------------------------------------------------------------------
 
@@ -1507,12 +1619,12 @@ class PyVirtualBench:
     class DigitalMultimeter(object):
         def __init__(self, outer, device_name, reset):
             self.nilcicapi =  outer.nilcicapi
-            self.libray_handle = outer.libray_handle
+            self.library_handle = outer.library_handle
             self.device_name = device_name if device_name else outer.device_name
             self.instrument_handle = c_int(0)
-            status = self.nilcicapi.niVB_DMM_InitializeW(self.libray_handle, c_wchar_p(self.device_name), c_bool(reset), byref(self.instrument_handle))
+            status = self.nilcicapi.niVB_DMM_InitializeW(self.library_handle, c_wchar_p(self.device_name), c_bool(reset), byref(self.instrument_handle))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def release(self):
             ''' Stops the session and deallocates any resources acquired during
@@ -1520,7 +1632,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_DMM_Close(self.instrument_handle)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             self.instrument_handle = c_int(0)
 
         def configure_measurement(self, dmm_function, auto_range = True, manual_range = 1.0):
@@ -1528,28 +1640,28 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_DMM_ConfigureMeasurement(self.instrument_handle, c_int32(dmm_function), c_int32(auto_range), c_double(manual_range))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def configure_dc_voltage(self, dmm_input_resistance):
             ''' Configures DC voltage measurement specifications for the DMM.
             '''
             status = self.nilcicapi.niVB_DMM_ConfigureDCVoltage(self.instrument_handle, c_int32(dmm_input_resistance))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def configure_dc_current(self, auto_range_terminal):
             ''' Configures DC current measurement specifications for the DMM.
             '''
             status = self.nilcicapi.niVB_DMM_ConfigureDCCurrent(self.instrument_handle, c_int32(auto_range_terminal))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def configure_ac_current(self, auto_range_terminal):
             ''' Configures AC current measurement specifications for the DMM.
             '''
             status = self.nilcicapi.niVB_DMM_ConfigureACCurrent(self.instrument_handle, c_int32(auto_range_terminal))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def query_measurement(self, dmm_function):
             ''' Indicates the measurement settings for the instrument.
@@ -1558,7 +1670,7 @@ class PyVirtualBench:
             range_data = c_double(0)
             status = self.nilcicapi.niVB_DMM_QueryMeasurement(self.instrument_handle, c_int32(dmm_function), byref(auto_range), byref(range_data))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return auto_range.value, range_data.value
 
         def query_dc_voltage(self):
@@ -1567,7 +1679,7 @@ class PyVirtualBench:
             dmm_input_resistance = c_int32(0) # DmmInputResistance
             status = self.nilcicapi.niVB_DMM_QueryDCVoltage(self.instrument_handle, byref(dmm_input_resistance))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return DmmInputResistance(dmm_input_resistance.value)
 
         def query_dc_current(self):
@@ -1576,7 +1688,7 @@ class PyVirtualBench:
             auto_range_dmm_current_terminal = c_int32(0) # DmmCurrentTerminal
             status = self.nilcicapi.niVB_DMM_QueryDCCurrent(self.instrument_handle, byref(auto_range_dmm_current_terminal))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return DmmCurrentTerminal(auto_range_dmm_current_terminal.value)
 
         def query_ac_current(self):
@@ -1585,7 +1697,7 @@ class PyVirtualBench:
             auto_range_dmm_current_terminal = c_int32(0) # DmmCurrentTerminal
             status = self.nilcicapi.niVB_DMM_QueryACCurrent(self.instrument_handle, byref(auto_range_dmm_current_terminal))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return DmmCurrentTerminal(auto_range_dmm_current_terminal.value)
 
         def read(self):
@@ -1594,7 +1706,7 @@ class PyVirtualBench:
             measurement = c_double(0)
             status = self.nilcicapi.niVB_DMM_Read(self.instrument_handle, byref(measurement))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return measurement.value
 
         def reset_instrument(self):
@@ -1603,14 +1715,14 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_DMM_ResetInstrument(self.instrument_handle)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def export_configuration(self, configuration_filename):
             ''' Exports a configuration file for use with the DMM.
             '''
             status = self.nilcicapi.niVB_DMM_ExportConfigurationW(self.instrument_handle, configuration_filename)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def import_configuration(self, configuration_filename):
             ''' Imports a configuration file for use with the DMM. You can
@@ -1619,7 +1731,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_DMM_ImportConfigurationW(self.instrument_handle, configuration_filename)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
 #------------------------------------------------------------------------------
 
@@ -1630,9 +1742,9 @@ class PyVirtualBench:
         local_device_name = device_name if device_name else self.device_name
         adjustment_date = Timestamp()
         adjustment_temperature = c_double(0)
-        status = self.nilcicapi.niVB_DMM_GetCalibrationAdjustmentInformationW(self.libray_handle, c_wchar_p(local_device_name), byref(adjustment_date), byref(adjustment_temperature))
+        status = self.nilcicapi.niVB_DMM_GetCalibrationAdjustmentInformationW(self.library_handle, c_wchar_p(local_device_name), byref(adjustment_date), byref(adjustment_temperature))
         if (status != Status.SUCCESS):
-            raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+            raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
         return adjustment_date, adjustment_temperature.value
 
     def acquire_digital_multimeter_calibration(self, device_name = '', password = ''):
@@ -1645,31 +1757,37 @@ class PyVirtualBench:
     class DigitalMultimeterCalibration(object):
         def __init__(self, outer, device_name, password):
             self.nilcicapi =  outer.nilcicapi
-            self.libray_handle = outer.libray_handle
+            self.library_handle = outer.library_handle
             self.device_name = device_name if device_name else outer.device_name
             self.instrument_handle = c_int(0)
-            status = self.nilcicapi.niVB_DMM_InitializeCalibrationW(self.libray_handle, c_wchar_p(self.device_name), c_wchar_p(password), self.instrument_handle)
+            status = self.nilcicapi.niVB_DMM_InitializeCalibrationW(self.library_handle, c_wchar_p(self.device_name), c_wchar_p(password), self.instrument_handle)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def release(self, calibration_action = CalibrationAction.COMMIT):
             ''' Closes the calibration session, then resets the device.
             '''
             status = self.nilcicapi.niVB_DMM_CloseCalibration(self.instrument_handle, calibration_action)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             self.instrument_handle = c_int(0)
 
-        def get_dc_voltage_calibration_adjustment_points(self, range_data_size, adjustment_point_size):
-            ''' Returns the adjustment point and range_data configurations needed to
+        def get_dc_voltage_calibration_adjustment_points(self):
+            ''' Returns the adjustment point and range configurations needed to
                 sweep the DMM for DC voltage adjustment.
             '''
+            range_data_size_out = c_size_t(0)
+            adjustment_point_size_out =  c_size_t(0)
+            status = self.nilcicapi.niVB_DMM_GetDCVoltageCalibrationAdjustmentPoints(self.instrument_handle, None, c_size_t(0), byref(range_data_size_out), None, c_size_t(0), byref(adjustment_point_size_out))
+            if (status != Status.SUCCESS):
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+            range_data_size = c_size_t(range_data_size_out.value)
             range_data = (c_double * range_data_size)()
+            adjustment_point_size = c_size_t(adjustment_point_size_out.value)
             adjustment_point = (c_double * adjustment_point_size)()
-            range_data_size_out =  c_size_t(0)
             status = self.nilcicapi.niVB_DMM_GetDCVoltageCalibrationAdjustmentPoints(self.instrument_handle, byref(range_data), c_size_t(range_data_size), byref(range_data_size_out), byref(adjustment_point), c_size_t(adjustment_point_size), byref(adjustment_point_size_out))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return range_data.value, adjustment_point.value
 
         def adjust_dc_voltage_calibration(self, range_data, adjustment_point):
@@ -1678,24 +1796,30 @@ class PyVirtualBench:
                 the order returned by DMM  Get DC Voltage Calibration Adjustment
                 Points.
             '''
-            status = self.nilcicapi.niVB_DMM_AdjustDCVoltageCalibration(self.instrument_handle, range_data, adjustment_point)
+            status = self.nilcicapi.niVB_DMM_AdjustDCVoltageCalibration(self.instrument_handle, c_double(range_data), c_double(adjustment_point))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
-        def get_ac_voltage_calibration_adjustment_points(self, range_data_size, adjustment_point_size, frequency_size):
-            ''' Returns the adjustment point and range_data configurations needed to
+        def get_ac_voltage_calibration_adjustment_points(self):
+            ''' Returns the adjustment point and range configurations needed to
                 sweep the DMM for AC voltage adjustment.
             '''
-            range_data = (c_double * range_data_size)()
             range_data_size_out = c_size_t(0)
-            adjustment_point = (c_double * adjustment_point_size)()
             adjustment_point_size_out = c_size_t(0)
-            frequency = (c_double * frequency_size)()
             frequency_size_out = c_size_t(0)
+            status = self.nilcicapi.niVB_DMM_GetACVoltageCalibrationAdjustmentPoints(self.instrument_handle, None, c_size_t(0), byref(range_data_size_out), None, c_size_t(0), byref(adjustment_point_size_out), None, c_size_t(0), byref(frequency_size_out))
+            if (status != Status.SUCCESS):
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+            range_data_size = c_size_t(range_data_size_out.value)
+            range_data = (c_double * range_data_size)()
+            adjustment_point_size = c_size_t(adjustment_point_size_out.value)
+            adjustment_point = (c_double * adjustment_point_size)()
+            frequency_size = c_size_t(frequency_size_out.value)
+            frequency = (c_double * frequency_size)()
             status = self.nilcicapi.niVB_DMM_GetACVoltageCalibrationAdjustmentPoints(self.instrument_handle, byref(range_data), c_size_t(range_data_size), byref(range_data_size_out), byref(adjustment_point), c_size_t(adjustment_point_size), byref(adjustment_point_size_out), byref(frequency), c_size_t(frequency_size), byref(frequency_size_out))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
-            return range_data.contents, adjustment_point.contents, frequency.contents
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+            return range_data.value, adjustment_point.value, frequency.value
 
         def adjust_ac_voltage_calibration(self, range_data, adjustment_point, frequency):
             ''' Measures and stores the reference value for the specified
@@ -1706,20 +1830,25 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_DMM_AdjustACVoltageCalibration(self.instrument_handle, c_double(range_data), c_double(adjustment_point), c_double(frequency))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
-        def get_current_calibration_adjustionment_points(self, range_data_size, adjustment_point_size):
+        def get_current_calibration_adjustionment_points(self):
             ''' Returns the adjustment point and range_data configurations needed to
                 sweep the DMM for current adjustment.
             '''
-            range_data = (c_double * range_data_size)()
             range_data_size_out = c_size_t(0)
-            adjustment_point = (c_double * adjustment_point_size)()
             adjustment_point_size_out = c_size_t(0)
+            status = self.nilcicapi.niVB_DMM_GetCurrentCalibrationAdjustmentPoints(self.instrument_handle, None, c_size_t(0), byref(range_data_size_out), None, c_size_t(0), byref(adjustment_point_size_out))
+            if (status != Status.SUCCESS):
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+            range_data_size = c_size_t(range_data_size_out.value)
+            range_data = (c_double * range_data_size)()
+            adjustment_point_size = c_size_t(adjustment_point_size_out.value)
+            adjustment_point = (c_double * adjustment_point_size)()
             status = self.nilcicapi.niVB_DMM_GetCurrentCalibrationAdjustmentPoints(self.instrument_handle, byref(range_data), c_size_t(range_data_size), byref(range_data_size_out), byref(adjustment_point), c_size_t(adjustment_point_size), byref(adjustment_point_size_out))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
-            return range_data.contents, adjustment_point.contents
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+            return range_data.value, adjustment_point.value
 
         def adjust_current_calibration(self, range_data, adjustment_point):
             ''' Measures and stores the reference value for the specified
@@ -1730,19 +1859,25 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_DMM_AdjustCurrentCalibration(self.instrument_handle, c_double(range_data), c_double(adjustment_point))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
-        def get_resistance_calibration_adjustment_points(self, range_data_size, adjustment_point_size):
+        def get_resistance_calibration_adjustment_points(self):
             ''' Returns the adjustment point and range_data configurations needed to
                 sweep the DMM for resistance adjustment.
             '''
-            range_data = (c_double * range_data_size)()
             range_data_size_out = c_size_t(0)
-            adjustment_point = (c_double * adjustment_point_size)()
             adjustment_point_size_out = c_size_t(0)
+            status = self.nilcicapi.niVB_DMM_GetResistanceCalibrationAdjustmentPoints(self.instrument_handle, None, c_size_t(0), byref(range_data_size_out), None, c_size_t(0), byref(adjustment_point_size_out))
+            if (status != Status.SUCCESS):
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+            range_data_size = c_size_t(range_data_size_out.value)
+            range_data = (c_double * range_data_size)()
+            adjustment_point_size = c_size_t(adjustment_point_size_out.value)
+            adjustment_point = (c_double * adjustment_point_size)()
             status = self.nilcicapi.niVB_DMM_GetResistanceCalibrationAdjustmentPoints(self.instrument_handle, byref(range_data), c_size_t(range_data_size), byref(range_data_size_out), byref(adjustment_point), c_size_t(adjustment_point_size), byref(adjustment_point_size_out))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+            return range_data.value, adjustment_point.value
 
         def setup_resistance_calibration(self, range_data):
             ''' Configures the DMM to use the specified resistance range_data and
@@ -1750,7 +1885,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_DMM_SetupResistanceCalibration(self.instrument_handle, c_double(range_data))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def adjust_resistance_calibration(self, adjustment_point):
             ''' Measures and stores the reference value for the specified
@@ -1761,7 +1896,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_DMM_AdjustResistanceCalibration(self.instrument_handle, c_double(adjustment_point))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
 #------------------------------------------------------------------------------
 
@@ -1774,12 +1909,12 @@ class PyVirtualBench:
     class PowerSupply(object):
         def __init__(self, outer, device_name, reset):
             self.nilcicapi =  outer.nilcicapi
-            self.libray_handle = outer.libray_handle
+            self.library_handle = outer.library_handle
             self.device_name = device_name if device_name else outer.device_name
             self.instrument_handle = c_int(0)
-            status = self.nilcicapi.niVB_PS_InitializeW(self.libray_handle, c_wchar_p(self.device_name), c_bool(reset), byref(self.instrument_handle))
+            status = self.nilcicapi.niVB_PS_InitializeW(self.library_handle, c_wchar_p(self.device_name), c_bool(reset), byref(self.instrument_handle))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def release(self):
             ''' Stops the session and deallocates any resources acquired during
@@ -1788,7 +1923,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_PS_Close(self.instrument_handle)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             self.instrument_handle = c_int(0)
 
         def configure_voltage_output(self, channel, voltage_level, current_limit):
@@ -1798,7 +1933,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_PS_ConfigureVoltageOutputW(self.instrument_handle, channel, c_double(voltage_level), c_double(current_limit))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def configure_current_output(self, channel, current_level, voltage_limit):
             ''' Configures a current output on the specified channel. This
@@ -1807,7 +1942,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_PS_ConfigureCurrentOutputW(self.instrument_handle, channel, c_double(current_level), c_double(voltage_limit))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def enable_tracking(self, enable_tracking):
             ''' Enables or disables tracking between the positive and negative
@@ -1817,7 +1952,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_PS_EnableTracking(self.instrument_handle, c_bool(enable_tracking))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def enable_all_outputs(self, enable_outputs):
             ''' Enables or disables all outputs on all channels of the
@@ -1825,7 +1960,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_PS_EnableAllOutputs(self.instrument_handle, c_bool(enable_outputs))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def query_voltage_output(self, channel):
             ''' Indicates the voltage output settings on the specified channel.
@@ -1834,7 +1969,7 @@ class PyVirtualBench:
             current_limit = c_double(0)
             status = self.nilcicapi.niVB_PS_QueryVoltageOutputW(self.instrument_handle, channel, byref(voltage_level), byref(current_limit))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return voltage_level, current_limit
 
         def query_current_output(self, channel):
@@ -1844,7 +1979,7 @@ class PyVirtualBench:
             voltage_limit = c_double(0)
             status = self.nilcicapi.niVB_PS_QueryCurrentOutputW(self.instrument_handle, channel, byref(current_level), byref(voltage_limit))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return current_level, voltage_limit
 
         def query_outputs_enabled(self):
@@ -1853,7 +1988,7 @@ class PyVirtualBench:
             outputs_enabled = c_bool(0)
             status = self.nilcicapi.niVB_PS_QueryOutputsEnabled(self.instrument_handle, byref(outputs_enabled))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return outputs_enabled.value
 
         def query_tracking(self):
@@ -1862,7 +1997,7 @@ class PyVirtualBench:
             tracking_enabled = c_bool(0)
             status = self.nilcicapi.niVB_PS_QueryTracking(self.instrument_handle, byref(tracking_enabled))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return tracking_enabled.value
 
         def read_output(self, channel):
@@ -1873,7 +2008,7 @@ class PyVirtualBench:
             ps_state = c_int32(0) # PsState
             status = self.nilcicapi.niVB_PS_ReadOutputW(self.instrument_handle, channel, byref(actual_voltage_level), byref(actual_current_level), byref(ps_state))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return actual_voltage_level.value, actual_current_level.value, PsState(ps_state.value)
 
         def reset_instrument(self):
@@ -1882,14 +2017,14 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_PS_ResetInstrument(self.instrument_handle)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def export_configuration(self, configuration_filename):
             ''' Exports a configuration file for use with the power supply.
             '''
             status = self.nilcicapi.niVB_PS_ExportConfigurationW(self.instrument_handle, configuration_filename)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def import_configuration(self, configuration_filename):
             ''' Imports a configuration file for use with the power supply. You
@@ -1898,7 +2033,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_PS_ImportConfigurationW(self.instrument_handle, configuration_filename)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
 #------------------------------------------------------------------------------
 
@@ -1909,9 +2044,9 @@ class PyVirtualBench:
         local_device_name = device_name if device_name else self.device_name
         adjustment_date = Timestamp()
         adjustment_temperature = c_double(0)
-        status = self.nilcicapi.niVB_PS_GetCalibrationAdjustmentInformationW(self.libray_handle, c_wchar_p(local_device_name),  byref(adjustment_date),  byref(adjustment_temperature))
+        status = self.nilcicapi.niVB_PS_GetCalibrationAdjustmentInformationW(self.library_handle, c_wchar_p(local_device_name),  byref(adjustment_date),  byref(adjustment_temperature))
         if (status != Status.SUCCESS):
-            raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+            raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
         return adjustment_date, adjustment_temperature.value
 
     def acquire_power_supply_calibration(self, device_name = '', ps_cal_type = PsCalType.VOLTAGE, password = ''):
@@ -1924,37 +2059,42 @@ class PyVirtualBench:
     class PowerSupplyCalibration(object):
         def __init__(self, outer, device_name, ps_cal_type, password):
             self.nilcicapi =  outer.nilcicapi
-            self.libray_handle = outer.libray_handle
+            self.library_handle = outer.library_handle
             self.device_name = device_name if device_name else outer.device_name
             self.instrument_handle = c_int(0)
-            status = self.nilcicapi.niVB_PS_InitializeCalibration(self.libray_handle, c_wchar_p(self.device_name), c_int32(ps_cal_type), c_wchar_p(password), self.instrument_handle)
+            status = self.nilcicapi.niVB_PS_InitializeCalibration(self.library_handle, c_wchar_p(self.device_name), c_int32(ps_cal_type), c_wchar_p(password), self.instrument_handle)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def release(self, calibration_action = CalibrationAction.COMMIT):
             ''' Closes the calibration session, then resets the device.
             '''
             status = self.nilcicapi.niVB_PS_CloseCalibration(self.instrument_handle, c_int32(calibration_action))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             self.instrument_handle = c_int(0)
 
-        def get_adjustment_points(self, channel, adjustment_points_size):
+        def get_adjustment_points(self, channel):
             ''' Returns the adjustment points needed to sweep the instrument for
                 adjustment on the specified Channel.
             '''
-            adjustment_points = (c_double * adjustment_points_size)()
             adjustment_points_size_out = c_size_t(0)
+            status = self.nilcicapi.niVB_PS_GetAdjustmentPointsW(self.instrument_handle, c_wchar_p(channel), None, c_size_t(0), byref(adjustment_points_size_out))
+            if (status != Status.SUCCESS):
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+            adjustment_points_size = c_size_t(adjustment_points_size_out.value)
+            adjustment_points = (c_double * adjustment_points_size)()
             status = self.nilcicapi.niVB_PS_GetAdjustmentPointsW(self.instrument_handle, c_wchar_p(channel), byref(adjustment_points), c_size_t(adjustment_points_size), byref(adjustment_points_size_out))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+            return adjustment_points.value;
 
         def set_adjustment_point(self, channel, adjustment_point):
             ''' Sets the calibration adjustment point for the specified Channel.
             '''
             status = self.nilcicapi.niVB_PS_SetAdjustmentPointW(self.instrument_handle, c_wchar_p(channel), c_double(adjustment_point))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def measure_adjustment_point(self, channel, reference_value):
             ''' Measures the adjustment points for the specified Channel given a
@@ -1962,7 +2102,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_PS_MeasureAdjustmentPointW(self.instrument_handle, c_wchar_p(channel), c_double(reference_value))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
 #------------------------------------------------------------------------------
 
@@ -1977,18 +2117,18 @@ class PyVirtualBench:
         def __init__(self, outer, bus, reset):
             self.bus = bus
             self.nilcicapi =  outer.nilcicapi
-            self.libray_handle = outer.libray_handle
+            self.library_handle = outer.library_handle
             self.instrument_handle = c_int(0)
-            status = self.nilcicapi.niVB_SPI_InitializeW(self.libray_handle, c_wchar_p(self.bus), c_bool(reset), byref(self.instrument_handle))
+            status = self.nilcicapi.niVB_SPI_InitializeW(self.library_handle, c_wchar_p(self.bus), c_bool(reset), byref(self.instrument_handle))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def release(self):
             ''' Closes the session specified in Instrument Handle In.
             '''
             status = self.nilcicapi.niVB_SPI_Close(self.instrument_handle)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             self.instrument_handle = c_int(0)
 
         def configure_bus(self, clock_rate, clock_polarity, clock_phase, chip_select_polarity):
@@ -1996,7 +2136,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_SPI_ConfigureBus(self.instrument_handle, c_double(clock_rate), c_int32(clock_polarity), c_int32(clock_phase), c_int32(chip_select_polarity))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def query_bus_configuration(self):
             ''' Indicates the current basic configuration of the SPI engine.
@@ -2007,7 +2147,7 @@ class PyVirtualBench:
             chip_select_polarity = c_int32(0) # Polarity
             status = self.nilcicapi.niVB_SPI_QueryBusConfiguration(self.instrument_handle, byref(clock_rate), byref(clock_polarity), byref(clock_phase), byref(chip_select_polarity))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return clock_rate.value, Polarity(clock_polarity.value), ClockPhase(clock_phase.value), Polarity(chip_select_polarity.value)
 
         def write_read(self, write_data, bytes_per_frame, read_data_size):
@@ -2019,7 +2159,7 @@ class PyVirtualBench:
             local_write_data = (c_uint8 * len(write_data))(*write_data)
             status = self.nilcicapi.niVB_SPI_WriteRead(self.instrument_handle, local_write_data, c_size_t(len(local_write_data)), c_int32(bytes_per_frame), byref(read_data), c_size_t(read_data_size))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             for i in range(read_data_size): read_data_out.append(read_data[i])
             return read_data_out
 
@@ -2029,14 +2169,14 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_SPI_ResetInstrument(self.instrument_handle)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def export_configuration(self, configuration_filename):
             ''' Exports the current configuration of the instrument to a file.
             '''
             status = self.nilcicapi.niVB_SPI_ExportConfigurationW(self.instrument_handle, c_wchar_p(configuration_filename))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def import_configuration(self, configuration_filename):
             ''' Imports a configuration file for use with the SPI engine. You
@@ -2045,7 +2185,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_SPI_ImportConfigurationW(self.instrument_handle, c_wchar_p(configuration_filename))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
 #------------------------------------------------------------------------------
 
@@ -2060,18 +2200,18 @@ class PyVirtualBench:
         def __init__(self, outer, bus, reset):
             self.bus = outer.bus
             self.nilcicapi =  outer.nilcicapi
-            self.libray_handle = outer.libray_handle
+            self.library_handle = outer.library_handle
             self.instrument_handle = c_int(0)
-            status = self.nilcicapi.niVB_I2C_InitializeW(self.libray_handle, c_wchar_p(self.bus), c_bool(reset), byref(self.instrument_handle))
+            status = self.nilcicapi.niVB_I2C_InitializeW(self.library_handle, c_wchar_p(self.bus), c_bool(reset), byref(self.instrument_handle))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def release(self):
             ''' Closes the session specified in Instrument Handle In.
             '''
             status = self.nilcicapi.niVB_I2C_Close(self.instrument_handle)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             self.instrument_handle = c_int(0)
 
         def configure_bus(self, i2c_clock_rate, address, ic2_address_size, enable_pullups):
@@ -2079,7 +2219,7 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_I2C_ConfigureBus(self.instrument_handle, c_int32(i2c_clock_rate), c_uint16(address), c_int32(ic2_address_size), c_bool(enable_pullups))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def query_bus_configuration(self):
             ''' Indicates the current basic configuration of the I2C engine.
@@ -2090,7 +2230,7 @@ class PyVirtualBench:
             pullups_enabled = c_bool(0)
             status = self.nilcicapi.niVB_I2C_QueryBusConfiguration(self.instrument_handle, byref(clock_rate), byref(address), byref(address_size), byref(pullups_enabled))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return I2cClockRate(clock_rate.value), address.value, I2cAddressSize(address_size.value), pullups_enabled.value
 
         def read(self, timeout_in_secs, read_data_size):
@@ -2099,7 +2239,7 @@ class PyVirtualBench:
             read_data = (c_uint8 * read_data_size)()
             status = self.nilcicapi.niVB_I2C_Read(self.instrument_handle, c_double(timeout_in_secs), byref(read_data), c_size_t(read_data_size))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return read_data.value
 
         def write(self, write_data, timeout_in_secs):
@@ -2108,7 +2248,8 @@ class PyVirtualBench:
             number_of_bytes_written = c_int32(0) # Why does nivirtualbench.h (the file installed by National Instruments) not use size_t here?
             status = self.nilcicapi.niVB_I2C_Write(self.instrument_handle, byref(write_data), c_size_t(len(write_data)), c_double(timeout_in_secs), byref(number_of_bytes_written))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+            return number_of_bytes_written.value
 
         def write_read(self, write_data, timeout_in_secs, read_data_size):
             ''' Performs a write followed by read (combined format) on an I2C
@@ -2116,12 +2257,12 @@ class PyVirtualBench:
             '''
             read_data_out = []
             number_of_bytes_written = c_int32(0)
-            read_data = (c_byte * read_data_size)()
-            status = self.nilcicapi.niVB_I2C_WriteRead(self.instrument_handle, c_char_p(write_data), c_size_t(len(write_data)), c_double(timeout_in_secs), c_pointer(number_of_bytes_written), byref(read_data), c_size_t(read_data_size))
+            read_data = (c_uint8 * read_data_size)()
+            status = self.nilcicapi.niVB_I2C_WriteRead(self.instrument_handle, c_char_p(write_data), c_size_t(len(write_data)), c_double(timeout_in_secs), byref(number_of_bytes_written), byref(read_data), c_size_t(read_data_size))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             for i in read_data_size: read_data_out.append(read_data[i])
-            return read_data_out
+            return read_data_out, number_of_bytes_written.value
 
         def reset_instrument(self):
             ''' Resets the session configuration to default values, and resets
@@ -2129,14 +2270,14 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_I2C_ResetInstrument(self.instrument_handle)
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def export_configuration(self, configuration_filename):
             ''' Exports the current configuration of the instrument to a file.
             '''
             status = self.nilcicapi.niVB_I2C_ExportConfigurationW(self.instrument_handle, c_wchar_p(configuration_filename))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def import_configuration(self, configuration_filename):
             ''' Imports a configuration file for use with the I2C engine. You
@@ -2145,4 +2286,4 @@ class PyVirtualBench:
             '''
             status = self.nilcicapi.niVB_I2C_ImportConfigurationW(self.instrument_handle, c_wchar_p(configuration_filename))
             if (status != Status.SUCCESS):
-                raise PyVirtualBenchException(status, self.nilcicapi, self.libray_handle)
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)

@@ -1,7 +1,7 @@
 /*============================================================================*/
 /*                  National Instruments / VirtualBench API                   */
 /*----------------------------------------------------------------------------*/
-/*    Copyright (c) National Instruments 2014-2014.  All Rights Reserved.     */
+/*    Copyright (c) National Instruments 2014-2016.  All Rights Reserved.     */
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
 /* Title:   nivirtualbench.h                                                  */
@@ -190,6 +190,8 @@ typedef enum NIVB_ENUM_TYPE {
    niVB_MSO_TriggerType_DigitalEdge = 2,
    niVB_MSO_TriggerType_DigitalPattern = 3,
    niVB_MSO_TriggerType_DigitalGlitch = 4,
+   niVB_MSO_TriggerType_AnalogPulseWidth = 5,
+   niVB_MSO_TriggerType_DigitalPulseWidth = 6,
 } niVB_MSO_TriggerType;
 
 typedef enum NIVB_ENUM_TYPE {
@@ -204,6 +206,18 @@ typedef enum NIVB_ENUM_TYPE {
    niVB_MSO_TriggerReason_Forced = 1,
    niVB_MSO_TriggerReason_Auto = 2,
 } niVB_MSO_TriggerReason;
+
+typedef enum NIVB_ENUM_TYPE {
+   niVB_MSO_ComparisonMode_GreaterThanUpperLimit = 0,
+   niVB_MSO_ComparisonMode_LessThanLowerLimit = 1,
+   niVB_MSO_ComparisonMode_InsideLimits = 2,
+   niVB_MSO_ComparisonMode_OutsideLimits = 3,
+} niVB_MSO_ComparisonMode;
+
+typedef enum NIVB_ENUM_TYPE {
+   niVB_MSO_TriggerPolarity_Positive = 0,
+   niVB_MSO_TriggerPolarity_Negative = 1,
+} niVB_MSO_TriggerPolarity;
 
 typedef enum NIVB_ENUM_TYPE {
    niVB_MSO_InputImpedance_1megaohm = 0,
@@ -257,6 +271,8 @@ typedef enum NIVB_ENUM_TYPE {
 
 typedef enum NIVB_ENUM_TYPE {
    niVB_Status_Success = 0,
+   niVB_Status_ErrorInputTerminationOverloaded = -375993,
+   niVB_Status_ErrorArbClipping = -375992,
    niVB_Status_ErrorInvalidOperationForMultipleChansEdgeTrigger = -375991,
    niVB_Status_ErrorI2CArbLost = -375990,
    niVB_Status_ErrorI2CNak = -375989,
@@ -404,7 +420,7 @@ typedef struct {
 #define NIVB_DECL
 #endif
 
-#define NIVB_LIBRARY_VERSION 17874944
+#define NIVB_LIBRARY_VERSION 253804545
 
 /*
  * Initialize the VirtualBench library.  This must be called at least once for
@@ -559,7 +575,9 @@ niVB_Status NIVB_DECL niVB_GetErrorDescriptionW(
 #endif
 
 /*
- * Attempts to log in to a networked device.
+ * Attempts to log in to a networked device. Logging in to a device grants 
+ * access to the permissions set for the specified user in NI Web-Based 
+ * Monitoring and Configuration.
  */
 niVB_Status NIVB_DECL niVB_LogIn(
    niVB_LibraryHandle libraryHandle,
@@ -576,7 +594,9 @@ niVB_Status NIVB_DECL niVB_LogInW(
 #endif
 
 /*
- * Logs out of a networked device that you are logged in to.
+ * Logs out of a networked device that you are logged in to. Logging out of a 
+ * device revokes access to the permissions set for the specified user in NI 
+ * Web-Based Monitoring and Configuration.
  */
 niVB_Status NIVB_DECL niVB_LogOut(
    niVB_LibraryHandle libraryHandle,
@@ -1261,6 +1281,56 @@ niVB_Status NIVB_DECL niVB_MSO_ConfigureDigitalGlitchTriggerW(
 #endif
 
 /*
+ * Configures a trigger to activate on the specified source when the analog 
+ * edge reaches the specified levels within a specified window of time.
+ */
+niVB_Status NIVB_DECL niVB_MSO_ConfigureAnalogPulseWidthTrigger(
+   niVB_MSO_InstrumentHandle instrumentHandle,
+   const char* triggerSource,
+   niVB_MSO_TriggerPolarity triggerPolarity,
+   double triggerLevel,
+   niVB_MSO_ComparisonMode comparisonMode,
+   double lowerLimit,
+   double upperLimit,
+   niVB_MSO_TriggerInstance triggerInstance);
+
+#if defined(_WIN32) && !defined(_CVI_)
+niVB_Status NIVB_DECL niVB_MSO_ConfigureAnalogPulseWidthTriggerW(
+   niVB_MSO_InstrumentHandle instrumentHandle,
+   const wchar_t* triggerSource,
+   niVB_MSO_TriggerPolarity triggerPolarity,
+   double triggerLevel,
+   niVB_MSO_ComparisonMode comparisonMode,
+   double lowerLimit,
+   double upperLimit,
+   niVB_MSO_TriggerInstance triggerInstance);
+#endif
+
+/*
+ * Configures a trigger to activate on the specified source when the digital 
+ * edge reaches the specified levels within a specified window of time.
+ */
+niVB_Status NIVB_DECL niVB_MSO_ConfigureDigitalPulseWidthTrigger(
+   niVB_MSO_InstrumentHandle instrumentHandle,
+   const char* triggerSource,
+   niVB_MSO_TriggerPolarity triggerPolarity,
+   niVB_MSO_ComparisonMode comparisonMode,
+   double lowerLimit,
+   double upperLimit,
+   niVB_MSO_TriggerInstance triggerInstance);
+
+#if defined(_WIN32) && !defined(_CVI_)
+niVB_Status NIVB_DECL niVB_MSO_ConfigureDigitalPulseWidthTriggerW(
+   niVB_MSO_InstrumentHandle instrumentHandle,
+   const wchar_t* triggerSource,
+   niVB_MSO_TriggerPolarity triggerPolarity,
+   niVB_MSO_ComparisonMode comparisonMode,
+   double lowerLimit,
+   double upperLimit,
+   niVB_MSO_TriggerInstance triggerInstance);
+#endif
+
+/*
  * Configures the amount of time to wait after a trigger condition is met 
  * before triggering.
  */
@@ -1307,7 +1377,8 @@ niVB_Status NIVB_DECL niVB_MSO_QueryEnabledAnalogChannelsW(
 
 /*
  * Indicates the properties that control the electrical characteristics of the 
- * specified channel.
+ * specified channel. This method returns an error if too much power is 
+ * applied to the channel.
  */
 niVB_Status NIVB_DECL niVB_MSO_QueryAnalogChannelCharacteristics(
    niVB_MSO_InstrumentHandle instrumentHandle,
@@ -1513,6 +1584,64 @@ niVB_Status NIVB_DECL niVB_MSO_QueryTriggerDelay(
    double* triggerDelay);
 
 /*
+ * Indicates the analog pulse width trigger configuration of the specified 
+ * instance.
+ */
+niVB_Status NIVB_DECL niVB_MSO_QueryAnalogPulseWidthTrigger(
+   niVB_MSO_InstrumentHandle instrumentHandle,
+   niVB_MSO_TriggerInstance triggerInstance,
+   char* triggerSource,
+   size_t triggerSourceSize,
+   size_t* triggerSourceSizeOut,
+   niVB_MSO_TriggerPolarity* triggerPolarity,
+   double* triggerLevel,
+   niVB_MSO_ComparisonMode* comparisonMode,
+   double* lowerLimit,
+   double* upperLimit);
+
+#if defined(_WIN32) && !defined(_CVI_)
+niVB_Status NIVB_DECL niVB_MSO_QueryAnalogPulseWidthTriggerW(
+   niVB_MSO_InstrumentHandle instrumentHandle,
+   niVB_MSO_TriggerInstance triggerInstance,
+   wchar_t* triggerSource,
+   size_t triggerSourceSize,
+   size_t* triggerSourceSizeOut,
+   niVB_MSO_TriggerPolarity* triggerPolarity,
+   double* triggerLevel,
+   niVB_MSO_ComparisonMode* comparisonMode,
+   double* lowerLimit,
+   double* upperLimit);
+#endif
+
+/*
+ * Indicates the digital pulse width trigger configuration of the specified 
+ * instance.
+ */
+niVB_Status NIVB_DECL niVB_MSO_QueryDigitalPulseWidthTrigger(
+   niVB_MSO_InstrumentHandle instrumentHandle,
+   niVB_MSO_TriggerInstance triggerInstance,
+   char* triggerSource,
+   size_t triggerSourceSize,
+   size_t* triggerSourceSizeOut,
+   niVB_MSO_TriggerPolarity* triggerPolarity,
+   niVB_MSO_ComparisonMode* comparisonMode,
+   double* lowerLimit,
+   double* upperLimit);
+
+#if defined(_WIN32) && !defined(_CVI_)
+niVB_Status NIVB_DECL niVB_MSO_QueryDigitalPulseWidthTriggerW(
+   niVB_MSO_InstrumentHandle instrumentHandle,
+   niVB_MSO_TriggerInstance triggerInstance,
+   wchar_t* triggerSource,
+   size_t triggerSourceSize,
+   size_t* triggerSourceSizeOut,
+   niVB_MSO_TriggerPolarity* triggerPolarity,
+   niVB_MSO_ComparisonMode* comparisonMode,
+   double* lowerLimit,
+   double* upperLimit);
+#endif
+
+/*
  * Returns the status of a completed or ongoing acquisition.
  */
 niVB_Status NIVB_DECL niVB_MSO_QueryAcquisitionStatus(
@@ -1522,7 +1651,8 @@ niVB_Status NIVB_DECL niVB_MSO_QueryAcquisitionStatus(
 /*
  * Transitions the acquisition from the Stopped state to the Running state. If 
  * the current state is Triggered, the acquisition is first transitioned to 
- * the Stopped state before transitioning to the Running state.
+ * the Stopped state before transitioning to the Running state. This method 
+ * returns an error if too much power is applied to any enabled channel.
  */
 niVB_Status NIVB_DECL niVB_MSO_Run(
    niVB_MSO_InstrumentHandle instrumentHandle,

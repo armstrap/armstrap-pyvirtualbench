@@ -2,7 +2,7 @@
 
 # The MIT License (MIT)
 #
-# Copyright (c) 2015 Charles Armstrap <charles@armstrap.org>
+# Copyright (c) 2016 Charles Armstrap <charles@armstrap.org>
 # If you like this library, consider donating to: http://bit.ly/pyvirtualbench
 # Anything helps.
 #
@@ -30,8 +30,13 @@ from pyvirtualbench import PyVirtualBench, PyVirtualBenchException, I2cClockRate
 # lines on a VirtualBench.
 
 try:
-    # Channel Configuration
+
+    # You will probably need to replace "myVirtualBench" with the name of your device.
+    # By default, the device name is the model number and serial number separated by a hyphen; e.g., "VB8012-309738A".
+    # You can see the device's name in the VirtualBench Application under File->About
     bus = "myVirtualBench/i2c/0"
+
+    # Channel Configuration
     clock_rate = I2cClockRate.ONE_HUNDRED_KHZ # 100kHz
     address = 0x50
     address_size = I2cAddressSize.SEVEN_BITS
