@@ -1,5 +1,5 @@
 # Armstrap pyVirtualBench
-Python wrappers to control NI VirtualBench.  These wrappers call into the official c-driver, allowing you to control VirtualBench from a Python application.
+Python wrappers to control NI VirtualBench.  These wrappers call into the official C driver, allowing you to control VirtualBench from a Python application.
 
 ![VirtualBench](https://github.com/armstrap/armstrap-pyvirtualbench/raw/master/images/ni-virtualbench.jpg)
 ![Python](https://github.com/armstrap/armstrap-pyvirtualbench/raw/master/images/python-logo-and-wordmark.png)
@@ -20,9 +20,9 @@ More information can be found on [ni.com](http://www.ni.com/virtualbench/).
  
 ## Requirements (Windows Only)
 * [NI VirtualBench hardware](http://www.ni.com/virtualbench/)
-* [VirtualBench driver >= 1.1.0](http://www.ni.com/download/virtualbench-driver-1.1.1/5116/en/)
+* [NI VirtualBench driver >= 1.1.0](http://search.ni.com/nisearch/app/main/p/bot/no/ap/tech/lang/en/pg/1/sn/catnav:du/q/NI-VirtualBench/)
 * [Python >= 3.4](https://www.python.org/downloads/)
-* `./examples/hands_free_dmm.py` Requirements
+* Requirements for `./examples/hands_free_dmm.py`:
     + [Infinity USB Digital Foot Control with Computer plug (IN-USB2)](http://www.amazon.com/Infinity-Digital-Control-Computer--USB2/dp/B002MY6I7G)
     + pip install pywinusb
     + pip install Pyglet
