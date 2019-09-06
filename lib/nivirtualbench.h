@@ -1,7 +1,7 @@
 /*============================================================================*/
 /*                  National Instruments / VirtualBench API                   */
 /*----------------------------------------------------------------------------*/
-/*    Copyright (c) National Instruments 2014-2016.  All Rights Reserved.     */
+/*    Copyright (c) National Instruments 2014-2018.  All Rights Reserved.     */
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
 /* Title:   nivirtualbench.h                                                  */
@@ -271,6 +271,7 @@ typedef enum NIVB_ENUM_TYPE {
 
 typedef enum NIVB_ENUM_TYPE {
    niVB_Status_Success = 0,
+   niVB_Status_ErrorCalFunctionNotSupported = -375995,
    niVB_Status_ErrorInputTerminationOverloaded = -375993,
    niVB_Status_ErrorArbClipping = -375992,
    niVB_Status_ErrorInvalidOperationForMultipleChansEdgeTrigger = -375991,
@@ -420,7 +421,7 @@ typedef struct {
 #define NIVB_DECL
 #endif
 
-#define NIVB_LIBRARY_VERSION 253804545
+#define NIVB_LIBRARY_VERSION 302039040
 
 /*
  * Initialize the VirtualBench library.  This must be called at least once for
@@ -921,6 +922,13 @@ niVB_Status NIVB_DECL niVB_FGEN_QueryGenerationStatus(
  * Transitions the session from the Stopped state to the Running state.
  */
 niVB_Status NIVB_DECL niVB_FGEN_Run(
+   niVB_FGEN_InstrumentHandle instrumentHandle);
+
+/*
+ * Performs offset nulling calibration on the device. You must run FGEN 
+ * Initialize prior to running this method.
+ */
+niVB_Status NIVB_DECL niVB_FGEN_SelfCalibrate(
    niVB_FGEN_InstrumentHandle instrumentHandle);
 
 /*

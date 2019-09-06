@@ -25,7 +25,7 @@
 from ctypes import c_bool, c_size_t, c_double, c_uint8, c_int32, c_uint32, c_int64, c_uint64, c_wchar, c_wchar_p, Structure, c_int, cdll, byref
 from enum import IntEnum
 
-NIVB_LIBRARY_VERSION = 253804545 # 0x0F20C001 15.2.0f0
+NIVB_LIBRARY_VERSION = 302039040 # 18.0.0f0, is found in nivirtualbench.h
 
 class Language(IntEnum):
     CURRENT_THREAD_LOCALE = 0
@@ -226,6 +226,7 @@ class I2cClockRate(IntEnum):
 
 class Status(IntEnum):
     SUCCESS = 0
+    niVB_Status_ErrorCalFunctionNotSupported = -375995
     ERROR_INPUT_TERMINATION_OVERLOADED = -375993
     ERROR_ARB_CLIPPING = -375992
     ERROR_INVALID_OPERATION_FOR_MULTIPLE_CHANS_EDGE_TRIGGER = -375991
@@ -757,6 +758,14 @@ class PyVirtualBench:
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
+        def self_calibrate(self):
+            '''Performs offset nulling calibration on the device. You must run FGEN
+               Initialize prior to running this method.
+            '''
+            status = self.nilcicapi.niVB_FGEN_SelfCalibrate(self.instrument_handle)
+            if (status != Status.SUCCESS):
+                raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
+        
         def stop(self):
             ''' Transitions the acquisition from either the Triggered or Running
                 state to the Stopped state.
