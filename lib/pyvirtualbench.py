@@ -1068,7 +1068,7 @@ class PyVirtualBench:
             vertical_offset = c_double(0)
             probe_attenuation = c_int32(0)
             vertical_coupling = c_int32(0)
-            status = self.nilcicapi.niVB_MSO_QueryAnalogChannelW(self.instrument_handle, c_wchar_p(channel), byref(channel_enabled), byref(vertical_range), byref(vertical_offset), byref(probe_attenuation), c_int32(vertical_coupling))
+            status = self.nilcicapi.niVB_MSO_QueryAnalogChannelW(self.instrument_handle, c_wchar_p(channel), byref(channel_enabled), byref(vertical_range), byref(vertical_offset), byref(probe_attenuation), byref(vertical_coupling))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return channel_enabled.value, vertical_range.value, vertical_offset.value, MsoProbeAttenuation(probe_attenuation.value), MsoCoupling(vertical_coupling.value)
