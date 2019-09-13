@@ -666,16 +666,16 @@ class PyVirtualBench:
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
-        def configure_arbitrary_waveform(self, waveform_size, sample_period):
+        def configure_arbitrary_waveform(self, waveform, sample_period):
             ''' Configures the instrument to output a waveform. The waveform is
                 output either after the end of the current waveform if output
                 is enabled, or immediately after output is enabled.
             '''
-            waveform = (c_double * waveform_size)()
-            status = self.nilcicapi.niVB_FGEN_ConfigureArbitraryWaveform(self.instrument_handle, byref(waveform), c_size_t(waveform_size), c_double(sample_period))
+            waveform_size = len(waveform)
+            waveform = (c_double * waveform_size)(*waveform)
+            status = self.nilcicapi.niVB_FGEN_ConfigureArbitraryWaveform(self.instrument_handle, waveform, c_size_t(waveform_size), c_double(sample_period))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
-            return waveform.value
 
         def configure_arbitrary_waveform_gain_and_offset(self, gain, dc_offset):
             ''' Configures the instrument to output an arbitrary waveform with a
