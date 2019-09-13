@@ -1984,7 +1984,7 @@ class PyVirtualBench:
             status = self.nilcicapi.niVB_PS_QueryVoltageOutputW(self.instrument_handle, channel, byref(voltage_level), byref(current_limit))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
-            return voltage_level, current_limit
+            return voltage_level.value, current_limit.value
 
         def query_current_output(self, channel):
             ''' Indicates the current output settings on the specified channel.
@@ -1994,7 +1994,7 @@ class PyVirtualBench:
             status = self.nilcicapi.niVB_PS_QueryCurrentOutputW(self.instrument_handle, channel, byref(current_level), byref(voltage_limit))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
-            return current_level, voltage_limit
+            return current_level.value, voltage_limit.value
 
         def query_outputs_enabled(self):
             ''' Indicates whether the outputs are enabled for the instrument.
