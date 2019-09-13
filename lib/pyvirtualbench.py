@@ -522,6 +522,7 @@ class PyVirtualBench:
     def acquire_digital_input_output(self, lines, reset = True):
         ''' Establishes communication with the device. This method should be
             called once per session.
+            lines requires full name specification e.g. 'VB8012-xxxxxxx/dig/0:7'
         '''
         return self.DigitalInputOutput(self, lines, reset)
 
@@ -531,6 +532,7 @@ class PyVirtualBench:
             self.library_handle = outer.library_handle
             self.lines = lines
             self.instrument_handle = c_int(0)
+            # only lines for writing need to be initialized, read is possible with library handle only
             status = self.nilcicapi.niVB_Dig_InitializeW(self.library_handle, c_wchar_p(self.lines), c_bool(reset), byref(self.instrument_handle))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
@@ -554,6 +556,7 @@ class PyVirtualBench:
 
         def export_signal(self, line, digitalSignalSource):
             ''' Exports a signal to the specified line.
+                digitalSignalSource: 0 for FGEN Start or 1 for MSO trigger.
             '''
             status = self.nilcicapi.niVB_Dig_ExportSignalW(self.instrument_handle, c_wchar_p(line), c_int32(digitalSignalSource))
             if (status != Status.SUCCESS):
@@ -572,9 +575,9 @@ class PyVirtualBench:
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
-            tristate_lines_size = c_size_t(tristate_lines_size_out.value)
-            static_lines_size = c_size_t(static_lines_size_out.value)
-            export_lines_size = c_size_t(export_lines_size_out.value)
+            tristate_lines_size = tristate_lines_size_out.value
+            static_lines_size = static_lines_size_out.value
+            export_lines_size = export_lines_size_out.value
             tristate_lines = (c_wchar * tristate_lines_size)()
             static_lines = (c_wchar * static_lines_size)()
             export_lines = (c_wchar * export_lines_size)()
@@ -604,13 +607,15 @@ class PyVirtualBench:
 
         def read(self, lines):
             ''' Reads the current state of the specified lines.
+                lines requires full name specification e.g. 'VB8012-xxxxxxx/dig/0:7'
+                since instrument_handle is not required (only library_handle)
             '''
             data_size_out = c_size_t(0)
             status = self.nilcicapi.niVB_Dig_ReadW(self.library_handle, c_wchar_p(lines), None, c_size_t(0), byref(data_size_out))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             data_out = []
-            data_size = c_size_t(data_size_out.value)
+            data_size = data_size_out.value
             data = (c_bool * data_size)()
             status = self.nilcicapi.niVB_Dig_ReadW(self.library_handle, c_wchar_p(lines), data, c_size_t(data_size), byref(data_size_out))
             if (status != Status.SUCCESS):
