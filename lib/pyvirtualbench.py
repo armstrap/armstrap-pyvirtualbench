@@ -443,7 +443,7 @@ class PyVirtualBench:
         status = self.nilcicapi.niVB_CollapseChannelStringW(self.library_handle, c_wchar_p(names_in), None, c_size_t(0), byref(names_out_size_out), None)
         if (status != Status.SUCCESS):
             raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
-        names_out_size = c_size_t(names_out_size_out.value)
+        names_out_size = names_out_size_out.value
         names_out = (c_wchar * names_out_size)()
         number_of_channels = c_size_t(0)
         status = self.nilcicapi.niVB_CollapseChannelStringW(self.library_handle, c_wchar_p(names_in), byref(names_out), c_size_t(names_out_size), None, byref(number_of_channels))
@@ -459,7 +459,7 @@ class PyVirtualBench:
         status = self.nilcicapi.niVB_ExpandChannelStringW(self.library_handle, c_wchar_p(names_in), None, c_size_t(0), byref(names_out_size_out), None)
         if (status != Status.SUCCESS):
             raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
-        names_out_size = c_size_t(names_out_size_out.value)
+        names_out_size = names_out_size_out.value
         names_out = (c_wchar * names_out_size)()
         number_of_channels = c_size_t(0)
         status = self.nilcicapi.niVB_ExpandChannelStringW(self.library_handle, c_wchar_p(names_in), byref(names_out), c_size_t(names_out_size), None, byref(number_of_channels))
@@ -1196,7 +1196,7 @@ class PyVirtualBench:
             status = self.nilcicapi.niVB_MSO_QueryAnalogEdgeTriggerW(self.instrument_handle, c_int32(trigger_instance), None, c_size_t(0), byref(trigger_source_size_out), byref(trigger_slope), byref(trigger_level), byref(trigger_hysteresis))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
-            trigger_source_size = c_size_t(trigger_source_size_out.value)
+            trigger_source_size = trigger_source_size_out.value
             trigger_source = (c_wchar * trigger_source_size)()
             status = self.nilcicapi.niVB_MSO_QueryAnalogEdgeTriggerW(self.instrument_handle, c_int32(trigger_instance), byref(trigger_source), c_size_t(trigger_source_size), byref(trigger_source_size_out), byref(trigger_slope), byref(trigger_level), byref(trigger_hysteresis))
             if (status != Status.SUCCESS):
@@ -1212,7 +1212,7 @@ class PyVirtualBench:
             status = self.nilcicapi.niVB_MSO_QueryDigitalEdgeTriggerW(self.instrument_handle, c_int32(trigger_instance), None, c_size_t(0), byref(trigger_source_size_out), byref(trigger_slope))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
-            trigger_source_size = c_size_t(trigger_source_size_out.value)
+            trigger_source_size = trigger_source_size_out.value
             trigger_source = (c_wchar * trigger_source_size)()
             status = self.nilcicapi.niVB_MSO_QueryDigitalEdgeTriggerW(self.instrument_handle, c_int32(trigger_instance), byref(trigger_source), c_size_t(trigger_source_size), byref(trigger_source_size_out), byref(trigger_slope))
             if (status != Status.SUCCESS):
@@ -1232,9 +1232,9 @@ class PyVirtualBench:
             status = self.nilcicapi.niVB_MSO_QueryDigitalPatternTriggerW(self.instrument_handle, c_int32(trigger_instance), None, c_size_t(0), byref(trigger_source_size_out), None, c_size_t(0), byref(trigger_pattern_size_out))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
-            trigger_source_size = c_size_t(trigger_source_size_out.value)
+            trigger_source_size = trigger_source_size_out.value
             trigger_source = (c_wchar * trigger_source_size)()
-            trigger_pattern_size = c_size_t(trigger_pattern_size_out.value)
+            trigger_pattern_size = trigger_pattern_size_out.value
             trigger_pattern = (c_wchar * trigger_pattern_size)()
             status = self.nilcicapi.niVB_MSO_QueryDigitalPatternTriggerW(self.instrument_handle, c_int32(trigger_instance), byref(trigger_source), c_size_t(trigger_source_size), byref(trigger_source_size_out), byref(trigger_pattern), c_size_t(trigger_pattern_size), byref(trigger_pattern_size_out))
             if (status != Status.SUCCESS):
@@ -1251,7 +1251,7 @@ class PyVirtualBench:
             status = self.nilcicapi.niVB_MSO_QueryDigitalGlitchTriggerW(self.instrument_handle, c_int32(trigger_instance), None, c_size_t(0), byref(trigger_source_size_out))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
-            trigger_source_size = c_size_t(trigger_source_size_out.value)
+            trigger_source_size = trigger_source_size_out.value
             trigger_source = (c_wchar * trigger_source_size)()
             status = self.nilcicapi.niVB_MSO_QueryDigitalGlitchTriggerW(self.instrument_handle, c_int32(trigger_instance), byref(trigger_source), c_size_t(trigger_source_size), byref(trigger_source_size_out))
             if (status != Status.SUCCESS):
@@ -1280,7 +1280,7 @@ class PyVirtualBench:
             status = self.nilcicapi.niVB_MSO_QueryAnalogPulseWidthTriggerW(self.instrument_handle, c_int32(trigger_instance), None, c_size_t(0), byref(trigger_source_size_out), byref(trigger_polarity), byref(trigger_level), byref(comparison_mode), byref(lower_limit), byref(upper_limit))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
-            trigger_source_size = c_size_t(trigger_source_size_out.value)
+            trigger_source_size = trigger_source_size_out.value
             trigger_source = (c_wchar * trigger_source_size)()
             status = self.nilcicapi.niVB_MSO_QueryAnalogPulseWidthTriggerW(self.instrument_handle, c_int32(trigger_instance), byref(trigger_source), c_size_t(trigger_source_size), byref(trigger_source_size_out), byref(trigger_polarity), byref(trigger_level), byref(comparison_mode), byref(lower_limit), byref(upper_limit))
             if (status != Status.SUCCESS):
@@ -1300,7 +1300,7 @@ class PyVirtualBench:
             status = self.nilcicapi.niVB_MSO_QueryDigitalPulseWidthTriggerW(self.instrument_handle, c_int32(trigger_instance), None, c_size_t(0), byref(trigger_source_size_out), byref(trigger_polarity), byref(comparison_mode), byref(lower_limit), byref(upper_limit))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
-            trigger_source_size = c_size_t(trigger_source_size_out.value)
+            trigger_source_size = trigger_source_size_out.value
             trigger_source = (c_wchar * trigger_source_size)()
             status = self.nilcicapi.niVB_MSO_QueryDigitalPulseWidthTriggerW(self.instrument_handle, c_int32(trigger_instance), byref(trigger_source), c_size_t(trigger_source_size), byref(trigger_source_size_out), byref(trigger_polarity), byref(comparison_mode), byref(lower_limit), byref(upper_limit))
             if (status != Status.SUCCESS):
