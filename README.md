@@ -27,3 +27,8 @@ More information can be found on [ni.com](http://www.ni.com/virtualbench/).
     + pip install pywinusb
     + pip install Pyglet
     + copy `./support/avbin-win32-5.zip/avbin.dll` into your `c:\Windows\System32` directory
+
+## Helpful Resources
+* [NI support article on pyVirtualBench](https://knowledge.ni.com/KnowledgeArticleDetails?id=kA00Z000000kHUFSA2)
+* VirtualBench C library is found in `C:\Program Files (x86)\National Instruments\Shared\ExternalCompilerSupport\C`
+* Examples for the C-API of VirtualBench are found in `C:\Users\Public\Documents\National Instruments\VirtualBench ANSI C Examples`
