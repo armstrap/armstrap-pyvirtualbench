@@ -36,8 +36,16 @@ try:
     # You can see the device's name in the VirtualBench Application under File->About
     bus = "myVirtualBench/i2c/0"
 
+    # For I2C wiring:
+    # SCL (Serial Clock) output maps to Digital I/O Pin 6 on VirtualBench device
+    # SDA (Serial Data) input/output maps to Digital I/O Pin 7 on VirtualBench device
+
     # Channel Configuration
     clock_rate = I2cClockRate.ONE_HUNDRED_KHZ # 100kHz
+
+    # You will probably need to replace "0x50" address with the address for your
+    # attached chip.  You can find the address by looking at the datasheet for
+    # your attached chip.
     address = 0x50
     address_size = I2cAddressSize.SEVEN_BITS
     enable_pullups = False
@@ -54,11 +62,14 @@ try:
 
     # Write and read from the bus.
     for i in range(10):
-        data_read = i2c.write_read(data_to_write, timeout, data_read_size)
+        data_read, number_of_bytes_written = i2c.write_read(data_to_write, timeout, data_read_size)
 
         print("Iteration %d:" % i)
-        print("Wrote: %s" % data_to_write)
-        print("Read: %s" % data_read)
+        print("Wrote %d bytes" % number_of_bytes_written)
+        for i in range(number_of_bytes_written): print("0x%02x" % data_to_write[i])
+
+        print("Read %d bytes" % len(data_read))
+        for i in range(len(data_read)): print("0x%02x" % data_read[i])
 
     i2c.release()
 except PyVirtualBenchException as e:
