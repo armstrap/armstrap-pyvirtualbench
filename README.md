@@ -28,6 +28,17 @@ More information can be found on [ni.com](http://www.ni.com/virtualbench/).
     + pip install Pyglet
     + copy `./support/avbin-win32-5.zip/avbin.dll` into your `c:\Windows\System32` directory
 
+## Quickstart Guide
+* Run the following on a Windows Command Line terminal
+```
+mkdir Projects
+cd Projects
+git clone https://github.com/armstrap/armstrap-pyvirtualbench.git
+cd armstrap-pyvirtualbench
+set PYTHONPATH=lib
+python examples\ps_example.py
+```
+
 ## Helpful Resources
 * [NI support article on pyVirtualBench](https://knowledge.ni.com/KnowledgeArticleDetails?id=kA00Z000000kHUFSA2)
 * VirtualBench C library is found in `C:\Program Files (x86)\National Instruments\Shared\ExternalCompilerSupport\C`
