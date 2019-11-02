@@ -524,6 +524,22 @@ class PyVirtualBench:
         ''' Establishes communication with the device. This method should be
             called once per session.
             lines requires full name specification e.g. 'VB8012-xxxxxxx/dig/0:7'
+
+            You can individually configure each line as an input or output. Each
+            of these lines has a 10 kΩ pull-down resistor when used for GPIO.
+            Outputs can be driven high to 3.3 V or low to ground.
+
+            Exported signal output—Each line can export the MSO Trigger or FGEN
+            Start signal. When importing a trigger, the mixed signal
+            oscilloscope (MSO) can display the signal present on the digital
+            I/O connector as a digital channel as well as use it as a trigger
+            for the acquisition. When exporting a trigger, these options are a
+            vailable:
+
+            * A pulse is sent every time the function generator (FGEN) begins a
+              new period of the signal being generated.
+            * A pulse is sent every time the MSO triggers.
+            * A pulse is sent at the frequency of the 60 Hz/50 Hz AC line.
         '''
         return self.DigitalInputOutput(self, lines, reset)
 
@@ -637,22 +653,6 @@ class PyVirtualBench:
     def acquire_function_generator(self, device_name = '', reset = True):
         ''' Establishes communication with the device. This method should be
             called once per session.
-
-            You can individually configure each line as an input or output. Each
-            of these lines has a 10 kΩ pull-down resistor when used for GPIO.
-            Outputs can be driven high to 3.3 V or low to ground.
-
-            Exported signal output—Each line can export the MSO Trigger or FGEN
-            Start signal. When importing a trigger, the mixed signal
-            oscilloscope (MSO) can display the signal present on the digital
-            I/O connector as a digital channel as well as use it as a trigger
-            for the acquisition. When exporting a trigger, these options are a
-            vailable:
-
-            * A pulse is sent every time the function generator (FGEN) begins a
-              new period of the signal being generated.
-            * A pulse is sent every time the MSO triggers.
-            * A pulse is sent at the frequency of the 60 Hz/50 Hz AC line.
         '''
         return self.FunctionGenerator(self, device_name, reset)
 
