@@ -491,7 +491,7 @@ class PyVirtualBench:
         ''' Sets calibration information for the specified device.
         '''
         local_device_name = device_name if device_name else self.device_name
-        status = self.nilcicapi.niVB_Cal_SetCalibrationInformationW(self.library_handle, c_wchar_p(device_name), Timestamp(calibration_date), c_int32(calibration_interval), c_wchar_p(password))
+        status = self.nilcicapi.niVB_Cal_SetCalibrationInformationW(self.library_handle, c_wchar_p(local_device_name), Timestamp(calibration_date), c_int32(calibration_interval), c_wchar_p(password))
         if (status != Status.SUCCESS):
             raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
@@ -500,7 +500,8 @@ class PyVirtualBench:
             method requires the current password for the device, and returns an
             error if the specified password is incorrect.
         '''
-        status = self.nilcicapi.niVB_Cal_SetCalibrationPasswordW(self.library_handle, c_wchar_p(device_name), c_wchar_p(current_password), c_wchar_p(new_password))
+        local_device_name = device_name if device_name else self.device_name
+        status = self.nilcicapi.niVB_Cal_SetCalibrationPasswordW(self.library_handle, c_wchar_p(local_device_name), c_wchar_p(current_password), c_wchar_p(new_password))
         if (status != Status.SUCCESS):
             raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
@@ -848,7 +849,7 @@ class PyVirtualBench:
             self.library_handle = outer.library_handle
             self.device_name = device_name if device_name else outer.device_name
             self.instrument_handle = c_int(0)
-            status = self.nilcicapi.niVB_FGEN_InitializeCalibrationW(self.library_handle, c_wchar_p(self.device_name), c_wchar_p(password), self.instrument_handle)
+            status = self.nilcicapi.niVB_FGEN_InitializeCalibrationW(self.library_handle, c_wchar_p(self.device_name), c_wchar_p(password), byref(self.instrument_handle))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
