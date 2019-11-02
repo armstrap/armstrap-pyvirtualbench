@@ -22,7 +22,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from ctypes import c_bool, c_size_t, c_double, c_uint8, c_int32, c_uint32, c_int64, c_uint64, c_wchar, c_wchar_p, Structure, c_int, cdll, byref
+from ctypes import c_bool, c_size_t, c_double, c_uint8, c_uint16, c_int32, c_uint32, c_int64, c_uint64, c_char_p, c_wchar, c_wchar_p, Structure, c_int, cdll, byref
 from enum import IntEnum
 
 NIVB_LIBRARY_VERSION = 302039040 # 18.0.0f0, is found in nivirtualbench.h
@@ -468,8 +468,8 @@ class PyVirtualBench:
         return names_out.value, number_of_channels.value
 
     def login(self, device_name = '', username = 'admin', password = ''):
-        ''' Attempts to log in to a networked device. Logging in to a device grants 
-            access to the permissions set for the specified user in NI Web-Based 
+        ''' Attempts to log in to a networked device. Logging in to a device grants
+            access to the permissions set for the specified user in NI Web-Based
             Monitoring and Configuration.
         '''
         local_device_name = device_name if device_name else self.device_name
@@ -478,7 +478,7 @@ class PyVirtualBench:
             raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
     def logout(self, device_name = ''):
-        ''' Logs out of a networked device that you are logged in to. Logging out of a 
+        ''' Logs out of a networked device that you are logged in to. Logging out of a
             device revokes access to the permissions set for the specified user in NI
             Web-Based Monitoring and Configuration.
         '''
@@ -523,6 +523,22 @@ class PyVirtualBench:
         ''' Establishes communication with the device. This method should be
             called once per session.
             lines requires full name specification e.g. 'VB8012-xxxxxxx/dig/0:7'
+
+            You can individually configure each line as an input or output. Each
+            of these lines has a 10 kΩ pull-down resistor when used for GPIO.
+            Outputs can be driven high to 3.3 V or low to ground.
+
+            Exported signal output—Each line can export the MSO Trigger or FGEN
+            Start signal. When importing a trigger, the mixed signal
+            oscilloscope (MSO) can display the signal present on the digital
+            I/O connector as a digital channel as well as use it as a trigger
+            for the acquisition. When exporting a trigger, these options are a
+            vailable:
+
+            * A pulse is sent every time the function generator (FGEN) begins a
+              new period of the signal being generated.
+            * A pulse is sent every time the MSO triggers.
+            * A pulse is sent at the frequency of the 60 Hz/50 Hz AC line.
         '''
         return self.DigitalInputOutput(self, lines, reset)
 
@@ -1042,7 +1058,7 @@ class PyVirtualBench:
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def configure_analog_pulse_width_trigger(self, trigger_source, trigger_polarity, trigger_level, comparison_mode, lower_limit, upper_limit, trigger_instance):
-            ''' Configures a trigger to activate on the specified source when the analog 
+            ''' Configures a trigger to activate on the specified source when the analog
                 edge reaches the specified levels within a specified window of time.
             '''
             status = self.nilcicapi.niVB_MSO_ConfigureAnalogPulseWidthTriggerW(self.instrument_handle, c_wchar_p(trigger_source), c_int32(trigger_polarity), c_double(trigger_level), c_int32(comparison_mode), c_double(lower_limit), c_double(upper_limit), c_int32(trigger_instance))
@@ -1050,7 +1066,7 @@ class PyVirtualBench:
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
         def configure_digital_pulse_width_trigger(self, trigger_source, trigger_polarity, comparison_mode, lower_limit, upper_limit, trigger_instance):
-            ''' Configures a trigger to activate on the specified source when the digital 
+            ''' Configures a trigger to activate on the specified source when the digital
                 edge reaches the specified levels within a specified window of time.
             '''
             status = self.nilcicapi.niVB_MSO_ConfigureDigitalPulseWidthTriggerW(self.instrument_handle, c_wchar_p(trigger_source), c_int32(trigger_polarity), c_int32(comparison_mode), c_double(lower_limit), c_double(upper_limit), c_int32(trigger_instance))
@@ -1268,7 +1284,7 @@ class PyVirtualBench:
             return trigger_delay.value
 
         def query_analog_pulse_width_trigger(self, trigger_instance):
-            ''' Indicates the analog pulse width trigger configuration of the specified 
+            ''' Indicates the analog pulse width trigger configuration of the specified
                 instance.
             '''
             trigger_source_size_out = c_size_t(0)
@@ -1288,7 +1304,7 @@ class PyVirtualBench:
             return trigger_source.value, MsoTriggerPolarity(trigger_polarity.value), trigger_level.value, MsoComparisonMode(comparison_mode.value), lower_limit.value, upper_limit.value
 
         def query_digital_pulse_width_trigger(self, trigger_instance):
-            ''' Indicates the digital pulse width trigger configuration of the specified 
+            ''' Indicates the digital pulse width trigger configuration of the specified
                 instance.
             '''
             trigger_source_size_out = c_size_t(0)
@@ -1317,12 +1333,12 @@ class PyVirtualBench:
             return MsoAcquisitionStatus(acquisition_status.value)
 
         def run(self, autoTrigger = True):
-            ''' Transitions the acquisition from the Stopped state to the 
-                Running state. If the current state is Triggered, the 
+            ''' Transitions the acquisition from the Stopped state to the
+                Running state. If the current state is Triggered, the
                 acquisition is first transitioned to the Stopped state before
-                transitioning to the Running state. This method returns an 
+                transitioning to the Running state. This method returns an
                 error if too much power is applied to any enabled channel.
-            ''' 
+            '''
             status = self.nilcicapi.niVB_MSO_Run(self.instrument_handle, c_bool(autoTrigger))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
@@ -2124,6 +2140,17 @@ class PyVirtualBench:
         ''' Creates and returns a new VirtualBench SPI session on the SPI engine
             for the device. The session is used in all subsequent VirtualBench
             SPI method calls. This method should be called once per session.
+
+            SPI bus mastering—You can use VirtualBench’s digital I/O to
+            interface to serial peripherals. When you configure a SPI bus, a set
+            of lines are reserved for the bus and each line's direction is
+            automatically configured.
+
+            spi/0 bus
+            dig/0: Clock output
+            dig/1: MOSI (Master Out Slave In)
+            dig/2: MISO (Master In Slave Out)
+            dig/3: CS (Chip Select) output
         '''
         return self.SerialPeripheralInterface(self, bus, reset)
 
@@ -2207,12 +2234,24 @@ class PyVirtualBench:
         ''' Creates and returns a new VirtualBench I2C session on the I2C engine
             for the device. The session is used in all subsequent VirtualBench
             I2C method calls. This method should be called once per session.
+
+            You can use VirtualBench to master an I2C (Inter-Integrated Circuit)
+            bus. When you configure an I2C bus, a set of lines are reserved for
+            the bus and each line's direction is automatically configured. By
+            default, all the GPIO lines have a 10 kΩ pull-down resistor
+            connected. When used in I2C mode, they can be configured to have a
+            pull-up instead. On the VB-8012, this pull-up has a value of 10 kΩ.
+            On the VB-8034/8054, it is a value of 1.5 kΩ.
+
+            i2c/0 bus
+            dig/6: SCL (Serial Clock) output
+            dig/7: SDA (Serial Data) input/output
         '''
         return self.InterIntegratedCircuit(self, bus, reset)
 
     class InterIntegratedCircuit(object):
         def __init__(self, outer, bus, reset):
-            self.bus = outer.bus
+            self.bus = bus
             self.nilcicapi =  outer.nilcicapi
             self.library_handle = outer.library_handle
             self.instrument_handle = c_int(0)
@@ -2250,11 +2289,13 @@ class PyVirtualBench:
         def read(self, timeout_in_secs, read_data_size):
             ''' Completes a read transaction on the bus.
             '''
+            read_data_out = []
             read_data = (c_uint8 * read_data_size)()
             status = self.nilcicapi.niVB_I2C_Read(self.instrument_handle, c_double(timeout_in_secs), byref(read_data), c_size_t(read_data_size))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
-            return read_data.value
+            for i in range(read_data_size): read_data_out.append(read_data[i])
+            return read_data_out
 
         def write(self, write_data, timeout_in_secs):
             ''' Completes a write transaction on the bus.
@@ -2272,10 +2313,13 @@ class PyVirtualBench:
             read_data_out = []
             number_of_bytes_written = c_int32(0)
             read_data = (c_uint8 * read_data_size)()
-            status = self.nilcicapi.niVB_I2C_WriteRead(self.instrument_handle, c_char_p(write_data), c_size_t(len(write_data)), c_double(timeout_in_secs), byref(number_of_bytes_written), byref(read_data), c_size_t(read_data_size))
+            write_data_len = c_size_t(len(write_data))
+            data = (c_uint8 * write_data_len.value)(*write_data)
+
+            status = self.nilcicapi.niVB_I2C_WriteRead(self.instrument_handle, byref(data), write_data_len, c_double(timeout_in_secs), byref(number_of_bytes_written), byref(read_data), c_size_t(read_data_size))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
-            for i in read_data_size: read_data_out.append(read_data[i])
+            for i in range(read_data_size): read_data_out.append(read_data[i])
             return read_data_out, number_of_bytes_written.value
 
         def reset_instrument(self):
