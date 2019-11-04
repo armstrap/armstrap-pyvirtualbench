@@ -2302,7 +2302,10 @@ class PyVirtualBench:
             ''' Completes a write transaction on the bus.
             '''
             number_of_bytes_written = c_int32(0) # Why does nivirtualbench.h (the file installed by National Instruments) not use size_t here?
-            status = self.nilcicapi.niVB_I2C_Write(self.instrument_handle, byref(write_data), c_size_t(len(write_data)), c_double(timeout_in_secs), byref(number_of_bytes_written))
+            write_data_len = c_size_t(len(write_data))
+            data = (c_uint8 * write_data_len.value)(*write_data)
+
+            status = self.nilcicapi.niVB_I2C_Write(self.instrument_handle, byref(data), write_data_len, c_double(timeout_in_secs), byref(number_of_bytes_written))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return number_of_bytes_written.value
