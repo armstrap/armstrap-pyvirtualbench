@@ -2,3 +2,4 @@ __pycache__
 *.sln
 *.pyproj
 *.suo
+.vscode
