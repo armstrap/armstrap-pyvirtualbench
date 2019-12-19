@@ -50,6 +50,12 @@ import os.path
 from threading import Thread
 import math
 
+# This is the example featured on hackaday.com on July 29th, 2015
+# https://hackaday.com/2015/07/29/talking-foot-pedal-controlled-bench-probes-for-virtualbench/
+# It featured combining multiple instruments onto a single set of probes and using a USB footpedal
+# to cycle through the instruments.
+# A video demonstation is available here: https://www.youtube.com/watch?v=1NOQRLI39es
+
 # You will probably need to replace "myVirtualBench" with the name of your device.
 # By default, the device name is the model number and serial number separated by a hyphen; e.g., "VB8012-309738A".
 # You can see the device's name in the VirtualBench Application under File->About

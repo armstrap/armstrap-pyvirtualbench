@@ -35,6 +35,12 @@ try:
     # You can see the device's name in the VirtualBench Application under File->About
     bus = "myVirtualBench/spi/0"
 
+    # For SPI wiring:
+    # SCLK (Serial Clock) output maps to Digital I/O Pin 0 on VirtualBench device
+    # MOSI (Master Out Slave In) input/output maps to Digital I/O Pin 1 on VirtualBench device
+    # MISO (Master In Slave Out) input/output maps to Digital I/O Pin 2 on VirtualBench device
+    # CS (Chip Select) output maps to Digital I/O Pin 3 on VirtualBench device
+
     # Channel Configuration
     clock_rate = 10000000.0 # 10MHz
     clock_polarity = Polarity.IDLE_LOW
@@ -42,7 +48,7 @@ try:
     chip_select_polarity = Polarity.IDLE_HIGH
 
     # Data
-    data_to_write = [ 0, 1, 2, 3, 4, 5, 6, 7 ]
+    data_to_write = [ 0x82, 0 ] # Read WHO_AM_I 0x82 register on attached SPI device
     data_read_size = len(data_to_write)
     bytes_per_frame = -1
 
@@ -52,12 +58,11 @@ try:
     spi.configure_bus(clock_rate, clock_polarity, clock_phase, chip_select_polarity)
 
     # Write and read from the bus.
-    for i in range(10):
-        data_read = spi.write_read(data_to_write, bytes_per_frame, data_read_size)
+    data_read = spi.write_read(data_to_write, bytes_per_frame, data_read_size)
 
-        print("Iteration %d:" % i)
-        print("Wrote: %s" % data_to_write)
-        print("Read: %s" % data_read)
+    print("Received %d bytes:" % len(data_read))
+    for i in range(len(data_read)):
+        print("%d (0x%02x) = %d (0x%02x)" % (i, i, data_read[i], data_read[i]))
 
     spi.release()
 except PyVirtualBenchException as e:

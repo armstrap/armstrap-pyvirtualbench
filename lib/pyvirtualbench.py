@@ -226,7 +226,7 @@ class I2cClockRate(IntEnum):
 
 class Status(IntEnum):
     SUCCESS = 0
-    niVB_Status_ErrorCalFunctionNotSupported = -375995
+    ERROR_CAL_FUNCTION_NOT_SUPPORTED = -375995
     ERROR_INPUT_TERMINATION_OVERLOADED = -375993
     ERROR_ARB_CLIPPING = -375992
     ERROR_INVALID_OPERATION_FOR_MULTIPLE_CHANS_EDGE_TRIGGER = -375991
@@ -491,7 +491,7 @@ class PyVirtualBench:
         ''' Sets calibration information for the specified device.
         '''
         local_device_name = device_name if device_name else self.device_name
-        status = self.nilcicapi.niVB_Cal_SetCalibrationInformationW(self.library_handle, c_wchar_p(device_name), Timestamp(calibration_date), c_int32(calibration_interval), c_wchar_p(password))
+        status = self.nilcicapi.niVB_Cal_SetCalibrationInformationW(self.library_handle, c_wchar_p(local_device_name), Timestamp(calibration_date), c_int32(calibration_interval), c_wchar_p(password))
         if (status != Status.SUCCESS):
             raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
@@ -500,7 +500,8 @@ class PyVirtualBench:
             method requires the current password for the device, and returns an
             error if the specified password is incorrect.
         '''
-        status = self.nilcicapi.niVB_Cal_SetCalibrationPasswordW(self.library_handle, c_wchar_p(device_name), c_wchar_p(current_password), c_wchar_p(new_password))
+        local_device_name = device_name if device_name else self.device_name
+        status = self.nilcicapi.niVB_Cal_SetCalibrationPasswordW(self.library_handle, c_wchar_p(local_device_name), c_wchar_p(current_password), c_wchar_p(new_password))
         if (status != Status.SUCCESS):
             raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
@@ -786,7 +787,7 @@ class PyVirtualBench:
             status = self.nilcicapi.niVB_FGEN_SelfCalibrate(self.instrument_handle)
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
-        
+
         def stop(self):
             ''' Transitions the acquisition from either the Triggered or Running
                 state to the Stopped state.
@@ -848,7 +849,7 @@ class PyVirtualBench:
             self.library_handle = outer.library_handle
             self.device_name = device_name if device_name else outer.device_name
             self.instrument_handle = c_int(0)
-            status = self.nilcicapi.niVB_FGEN_InitializeCalibrationW(self.library_handle, c_wchar_p(self.device_name), c_wchar_p(password), self.instrument_handle)
+            status = self.nilcicapi.niVB_FGEN_InitializeCalibrationW(self.library_handle, c_wchar_p(self.device_name), c_wchar_p(password), byref(self.instrument_handle))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
 
@@ -2301,7 +2302,10 @@ class PyVirtualBench:
             ''' Completes a write transaction on the bus.
             '''
             number_of_bytes_written = c_int32(0) # Why does nivirtualbench.h (the file installed by National Instruments) not use size_t here?
-            status = self.nilcicapi.niVB_I2C_Write(self.instrument_handle, byref(write_data), c_size_t(len(write_data)), c_double(timeout_in_secs), byref(number_of_bytes_written))
+            write_data_len = c_size_t(len(write_data))
+            local_write_data = (c_uint8 * write_data_len.value)(*write_data)
+
+            status = self.nilcicapi.niVB_I2C_Write(self.instrument_handle, byref(local_write_data), write_data_len, c_double(timeout_in_secs), byref(number_of_bytes_written))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             return number_of_bytes_written.value
@@ -2314,9 +2318,9 @@ class PyVirtualBench:
             number_of_bytes_written = c_int32(0)
             read_data = (c_uint8 * read_data_size)()
             write_data_len = c_size_t(len(write_data))
-            data = (c_uint8 * write_data_len.value)(*write_data)
+            local_write_data = (c_uint8 * write_data_len.value)(*write_data)
 
-            status = self.nilcicapi.niVB_I2C_WriteRead(self.instrument_handle, byref(data), write_data_len, c_double(timeout_in_secs), byref(number_of_bytes_written), byref(read_data), c_size_t(read_data_size))
+            status = self.nilcicapi.niVB_I2C_WriteRead(self.instrument_handle, byref(local_write_data), write_data_len, c_double(timeout_in_secs), byref(number_of_bytes_written), byref(read_data), c_size_t(read_data_size))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
             for i in range(read_data_size): read_data_out.append(read_data[i])
