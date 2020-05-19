@@ -22,10 +22,14 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+import struct
 from ctypes import c_bool, c_size_t, c_double, c_uint8, c_uint16, c_int32, c_uint32, c_int64, c_uint64, c_char_p, c_wchar, c_wchar_p, Structure, c_int, cdll, byref
 from enum import IntEnum
 
 NIVB_LIBRARY_VERSION = 302039040 # 18.0.0f0, is found in nivirtualbench.h
+
+PYTHON_ARCHITECTURE = 8 * struct.calcsize("P")  # 32 or 64 bit
+
 
 class Language(IntEnum):
     CURRENT_THREAD_LOCALE = 0
@@ -371,7 +375,10 @@ class PyVirtualBench:
         '''
         self.device_name = device_name
         self.nilcicapi = cdll.LoadLibrary("nilcicapi")
-        self.library_handle = c_int(0)
+        if PYTHON_ARCHITECTURE == 64:
+            self.library_handle = c_int64(0)
+        else:
+            self.library_handle = c_int(0)
         status = self.nilcicapi.niVB_Initialize(NIVB_LIBRARY_VERSION, byref(self.library_handle))
         if (status != Status.SUCCESS):
             raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
@@ -548,7 +555,10 @@ class PyVirtualBench:
             self.nilcicapi =  outer.nilcicapi
             self.library_handle = outer.library_handle
             self.lines = lines
-            self.instrument_handle = c_int(0)
+            if PYTHON_ARCHITECTURE == 64:
+                self.instrument_handle = c_int64(0)
+            else:
+                self.instrument_handle = c_int(0)
             # only lines for writing need to be initialized, read is possible with library handle only
             status = self.nilcicapi.niVB_Dig_InitializeW(self.library_handle, c_wchar_p(self.lines), c_bool(reset), byref(self.instrument_handle))
             if (status != Status.SUCCESS):
@@ -562,7 +572,10 @@ class PyVirtualBench:
             status = self.nilcicapi.niVB_Dig_Close(self.instrument_handle)
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
-            self.instrument_handle = c_int(0)
+            if PYTHON_ARCHITECTURE == 64:
+                self.instrument_handle = c_int64(0)
+            else:
+                self.instrument_handle = c_int(0)
 
         def tristate_lines(self, lines):
             ''' Sets all specified lines to a high-impedance state.
@@ -661,7 +674,10 @@ class PyVirtualBench:
             self.nilcicapi =  outer.nilcicapi
             self.library_handle = outer.library_handle
             self.device_name = device_name if device_name else outer.device_name
-            self.instrument_handle = c_int(0)
+            if PYTHON_ARCHITECTURE == 64:
+                self.instrument_handle = c_int64(0)
+            else:
+                self.instrument_handle = c_int(0)
             status = self.nilcicapi.niVB_FGEN_InitializeW(self.library_handle, c_wchar_p(self.device_name), c_bool(reset), byref(self.instrument_handle))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
@@ -674,7 +690,10 @@ class PyVirtualBench:
             status = self.nilcicapi.niVB_FGEN_Close(self.instrument_handle)
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
-            self.instrument_handle = c_int(0)
+            if PYTHON_ARCHITECTURE == 64:
+                self.instrument_handle = c_int64(0)
+            else:
+                self.instrument_handle = c_int(0)
 
         def configure_standard_waveform(self, waveform_function, amplitude, dc_offset, frequency, duty_cycle):
             ''' Configures the instrument to output a standard waveform.
@@ -848,7 +867,10 @@ class PyVirtualBench:
             self.nilcicapi =  outer.nilcicapi
             self.library_handle = outer.library_handle
             self.device_name = device_name if device_name else outer.device_name
-            self.instrument_handle = c_int(0)
+            if PYTHON_ARCHITECTURE == 64:
+                self.instrument_handle = c_int64(0)
+            else:
+                self.instrument_handle = c_int(0)
             status = self.nilcicapi.niVB_FGEN_InitializeCalibrationW(self.library_handle, c_wchar_p(self.device_name), c_wchar_p(password), byref(self.instrument_handle))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
@@ -859,7 +881,10 @@ class PyVirtualBench:
             status = self.nilcicapi.niVB_FGEN_CloseCalibration(self.instrument_handle, c_int32(calibration_action))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
-            self.instrument_handle = c_int(0)
+            if PYTHON_ARCHITECTURE == 64:
+                self.instrument_handle = c_int64(0)
+            else:
+                self.instrument_handle = c_int(0)
 
         def setup_offset_calibration(self, enable_filter):
             ''' Configures the instrument to output the offset values of the
@@ -936,7 +961,10 @@ class PyVirtualBench:
             self.nilcicapi =  outer.nilcicapi
             self.library_handle = outer.library_handle
             self.device_name = device_name if device_name else outer.device_name
-            self.instrument_handle = c_int(0)
+            if PYTHON_ARCHITECTURE == 64:
+                self.instrument_handle = c_int64(0)
+            else:
+                self.instrument_handle = c_int(0)
             status = self.nilcicapi.niVB_MSO_InitializeW(self.library_handle, c_wchar_p(self.device_name), c_bool(reset), byref(self.instrument_handle))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
@@ -949,7 +977,10 @@ class PyVirtualBench:
             status = self.nilcicapi.niVB_MSO_Close(self.instrument_handle)
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
-            self.instrument_handle = c_int(0)
+            if PYTHON_ARCHITECTURE == 64:
+                self.instrument_handle = c_int64(0)
+            else:
+                self.instrument_handle = c_int(0)
 
         def auto_setup(self):
             ''' Automatically configures the instrument.
@@ -1523,7 +1554,10 @@ class PyVirtualBench:
             self.nilcicapi =  outer.nilcicapi
             self.library_handle = outer.library_handle
             self.device_name = device_name if device_name else outer.device_name
-            self.instrument_handle = c_int(0)
+            if PYTHON_ARCHITECTURE == 64:
+                self.instrument_handle = c_int64(0)
+            else:
+                self.instrument_handle = c_int(0)
             status = self.nilcicapi.niVB_MSO_InitializeCalibrationW(self.library_handle, c_wchar_p(self.device_name), c_wchar_p(password), self.instrument_handle)
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
@@ -1534,7 +1568,10 @@ class PyVirtualBench:
             status = self.nilcicapi.niVB_MSO_CloseCalibration(self.instrument_handle, c_int32(calibration_action))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
-            self.instrument_handle = c_int(0)
+            if PYTHON_ARCHITECTURE == 64:
+                self.instrument_handle = c_int64(0)
+            else:
+                self.instrument_handle = c_int(0)
 
         def adjust_offset_calibration(self, channel):
             ''' Grounds the input to the specified Channel. You must run this
@@ -1652,7 +1689,10 @@ class PyVirtualBench:
             self.nilcicapi =  outer.nilcicapi
             self.library_handle = outer.library_handle
             self.device_name = device_name if device_name else outer.device_name
-            self.instrument_handle = c_int(0)
+            if PYTHON_ARCHITECTURE == 64:
+                self.instrument_handle = c_int64(0)
+            else:
+                self.instrument_handle = c_int(0)
             status = self.nilcicapi.niVB_DMM_InitializeW(self.library_handle, c_wchar_p(self.device_name), c_bool(reset), byref(self.instrument_handle))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
@@ -1664,7 +1704,10 @@ class PyVirtualBench:
             status = self.nilcicapi.niVB_DMM_Close(self.instrument_handle)
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
-            self.instrument_handle = c_int(0)
+            if PYTHON_ARCHITECTURE == 64:
+                self.instrument_handle = c_int64(0)
+            else:
+                self.instrument_handle = c_int(0)
 
         def configure_measurement(self, dmm_function, auto_range = True, manual_range = 1.0):
             ''' Configures the instrument to take a DMM measurement.
@@ -1790,7 +1833,10 @@ class PyVirtualBench:
             self.nilcicapi =  outer.nilcicapi
             self.library_handle = outer.library_handle
             self.device_name = device_name if device_name else outer.device_name
-            self.instrument_handle = c_int(0)
+            if PYTHON_ARCHITECTURE == 64:
+                self.instrument_handle = c_int64(0)
+            else:
+                self.instrument_handle = c_int(0)
             status = self.nilcicapi.niVB_DMM_InitializeCalibrationW(self.library_handle, c_wchar_p(self.device_name), c_wchar_p(password), self.instrument_handle)
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
@@ -1801,7 +1847,10 @@ class PyVirtualBench:
             status = self.nilcicapi.niVB_DMM_CloseCalibration(self.instrument_handle, calibration_action)
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
-            self.instrument_handle = c_int(0)
+            if PYTHON_ARCHITECTURE == 64:
+                self.instrument_handle = c_int64(0)
+            else:
+                self.instrument_handle = c_int(0)
 
         def get_dc_voltage_calibration_adjustment_points(self):
             ''' Returns the adjustment point and range configurations needed to
@@ -1942,7 +1991,10 @@ class PyVirtualBench:
             self.nilcicapi =  outer.nilcicapi
             self.library_handle = outer.library_handle
             self.device_name = device_name if device_name else outer.device_name
-            self.instrument_handle = c_int(0)
+            if PYTHON_ARCHITECTURE == 64:
+                self.instrument_handle = c_int64(0)
+            else:
+                self.instrument_handle = c_int(0)
             status = self.nilcicapi.niVB_PS_InitializeW(self.library_handle, c_wchar_p(self.device_name), c_bool(reset), byref(self.instrument_handle))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
@@ -1955,7 +2007,10 @@ class PyVirtualBench:
             status = self.nilcicapi.niVB_PS_Close(self.instrument_handle)
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
-            self.instrument_handle = c_int(0)
+            if PYTHON_ARCHITECTURE == 64:
+                self.instrument_handle = c_int64(0)
+            else:
+                self.instrument_handle = c_int(0)
 
         def configure_voltage_output(self, channel, voltage_level, current_limit):
             ''' Configures a voltage output on the specified channel. This
@@ -2092,7 +2147,10 @@ class PyVirtualBench:
             self.nilcicapi =  outer.nilcicapi
             self.library_handle = outer.library_handle
             self.device_name = device_name if device_name else outer.device_name
-            self.instrument_handle = c_int(0)
+            if PYTHON_ARCHITECTURE == 64:
+                self.instrument_handle = c_int64(0)
+            else:
+                self.instrument_handle = c_int(0)
             status = self.nilcicapi.niVB_PS_InitializeCalibration(self.library_handle, c_wchar_p(self.device_name), c_int32(ps_cal_type), c_wchar_p(password), self.instrument_handle)
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
@@ -2103,7 +2161,10 @@ class PyVirtualBench:
             status = self.nilcicapi.niVB_PS_CloseCalibration(self.instrument_handle, c_int32(calibration_action))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
-            self.instrument_handle = c_int(0)
+            if PYTHON_ARCHITECTURE == 64:
+                self.instrument_handle = c_int64(0)
+            else:
+                self.instrument_handle = c_int(0)
 
         def get_adjustment_points(self, channel):
             ''' Returns the adjustment points needed to sweep the instrument for
@@ -2160,7 +2221,10 @@ class PyVirtualBench:
             self.bus = bus
             self.nilcicapi =  outer.nilcicapi
             self.library_handle = outer.library_handle
-            self.instrument_handle = c_int(0)
+            if PYTHON_ARCHITECTURE == 64:
+                self.instrument_handle = c_int64(0)
+            else:
+                self.instrument_handle = c_int(0)
             status = self.nilcicapi.niVB_SPI_InitializeW(self.library_handle, c_wchar_p(self.bus), c_bool(reset), byref(self.instrument_handle))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
@@ -2171,7 +2235,10 @@ class PyVirtualBench:
             status = self.nilcicapi.niVB_SPI_Close(self.instrument_handle)
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
-            self.instrument_handle = c_int(0)
+            if PYTHON_ARCHITECTURE == 64:
+                self.instrument_handle = c_int64(0)
+            else:
+                self.instrument_handle = c_int(0)
 
         def configure_bus(self, clock_rate, clock_polarity, clock_phase, chip_select_polarity):
             ''' Configures the basic parameters of the SPI engine.
@@ -2255,7 +2322,10 @@ class PyVirtualBench:
             self.bus = bus
             self.nilcicapi =  outer.nilcicapi
             self.library_handle = outer.library_handle
-            self.instrument_handle = c_int(0)
+            if PYTHON_ARCHITECTURE == 64:
+                self.instrument_handle = c_int64(0)
+            else:
+                self.instrument_handle = c_int(0)
             status = self.nilcicapi.niVB_I2C_InitializeW(self.library_handle, c_wchar_p(self.bus), c_bool(reset), byref(self.instrument_handle))
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
@@ -2266,7 +2336,10 @@ class PyVirtualBench:
             status = self.nilcicapi.niVB_I2C_Close(self.instrument_handle)
             if (status != Status.SUCCESS):
                 raise PyVirtualBenchException(status, self.nilcicapi, self.library_handle)
-            self.instrument_handle = c_int(0)
+            if PYTHON_ARCHITECTURE == 64:
+                self.instrument_handle = c_int64(0)
+            else:
+                self.instrument_handle = c_int(0)
 
         def configure_bus(self, i2c_clock_rate, address, ic2_address_size, enable_pullups):
             ''' Configures the basic parameters of the I2C engine.
