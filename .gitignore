@@ -2,4 +2,5 @@ __pycache__
 *.sln
 *.pyproj
 *.suo
+pyvirtualbench.egg-info/
 .vscode
