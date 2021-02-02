@@ -42,7 +42,7 @@ setuptools.setup(
     name="pyvirtualbench",
     version="1.0.1",
     author="armstrap",
-    author_email="charles@armstrap.org",
+    author_email="armstrap@users.noreply.github.com",
     description="Python wrappers to control NI VirtualBench.",
     long_description=long_description,
     long_description_content_type="text/markdown",
