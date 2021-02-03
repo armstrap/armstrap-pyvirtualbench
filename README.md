@@ -37,9 +37,20 @@ mkdir Projects
 cd Projects
 git clone https://github.com/armstrap/armstrap-pyvirtualbench.git
 cd armstrap-pyvirtualbench
-set PYTHONPATH=lib
+python -m pip install .
 python examples\ps_example.py
 ```
+
+## For Developers
+* To install in "edit mode" - that is, to use the files directly in the project directory instead of making a read-only installation -
+  in the above instructions replace
+````
+python -m pip install .
+````
+with
+````
+python -m pip install -e .
+````
 
 ## Helpful Resources
 * [NI support article on pyVirtualBench](https://knowledge.ni.com/KnowledgeArticleDetails?id=kA00Z000000kHUFSA2)
