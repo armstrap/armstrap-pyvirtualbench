@@ -3,7 +3,7 @@
 # The MIT License (MIT)
 #
 # Copyright (c) 2016 Charles Armstrap <charles@armstrap.org>
-# If you like this library, consider donating to: http://bit.ly/pyvirtualbench
+# If you like this library, consider donating to: https://bit.ly/armstrap-opensource-dev
 # Anything helps.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
